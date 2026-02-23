@@ -495,7 +495,7 @@ func Prepare(t *testing.T, cfg config.Config, opts ...interface{}) {
 	startRuntime(t, cfg)
 
 	// Start event service (trace handler registered via blank import above)
-	if err := event.Start(); err != nil {
+	if err := event.Start(); err != nil && err != event.ErrAlreadyStart {
 		t.Fatalf("Failed to start event service: %v", err)
 	}
 }
