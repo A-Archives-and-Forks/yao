@@ -30,7 +30,7 @@ TESTTAGS ?= ""
 unit-test:
 	echo "mode: count" > coverage.out
 	for d in $(TESTFOLDER); do \
-		$(GO) test -tags $(TESTTAGS) -v -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal' $$d > tmp.out; \
+		$(GO) test -tags $(TESTTAGS) -v -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal|TestLeak_|TestScenario_' $$d > tmp.out; \
 		cat tmp.out; \
 		if grep -q "^--- FAIL" tmp.out; then \
 			rm tmp.out; \
@@ -56,7 +56,7 @@ unit-test:
 unit-test-core:
 	echo "mode: count" > coverage.out
 	for d in $(TESTFOLDER_CORE); do \
-		$(GO) test -tags $(TESTTAGS) -v -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal' $$d > tmp.out; \
+		$(GO) test -tags $(TESTTAGS) -v -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal|TestLeak_|TestScenario_' $$d > tmp.out; \
 		cat tmp.out; \
 		if grep -q "^--- FAIL" tmp.out; then \
 			rm tmp.out; \
@@ -224,9 +224,9 @@ unit-test-sandbox:
 benchmark:
 	@echo ""
 	@echo "============================================="
-	@echo "Running Benchmark Tests (agent & trace)..."
+	@echo "Running Benchmark Tests (agent, trace, event)..."
 	@echo "============================================="
-	@for d in $$($(GO) list ./agent/... ./trace/...); do \
+	@for d in $$($(GO) list ./agent/... ./trace/... ./event/...); do \
 		if $(GO) test -list=Benchmark $$d 2>/dev/null | grep -q "^Benchmark"; then \
 			echo ""; \
 			echo "📊 Benchmarking: $$d"; \
@@ -244,14 +244,14 @@ benchmark:
 memory-leak:
 	@echo ""
 	@echo "============================================="
-	@echo "Running Memory Leak Detection (agent & trace)..."
+	@echo "Running Memory Leak Detection (agent, trace, event)..."
 	@echo "============================================="
-	@for d in $$($(GO) list ./agent/... ./trace/...); do \
-		if $(GO) test -list='TestMemoryLeak|TestIsolateDisposal|TestGoroutineLeak' $$d 2>/dev/null | grep -qE "^Test(MemoryLeak|IsolateDisposal|GoroutineLeak)"; then \
+	@for d in $$($(GO) list ./agent/... ./trace/... ./event/...); do \
+		if $(GO) test -list='TestMemoryLeak|TestIsolateDisposal|TestGoroutineLeak|TestLeak_|TestScenario_' $$d 2>/dev/null | grep -qE "^Test(MemoryLeak|IsolateDisposal|GoroutineLeak|Leak_|Scenario_)"; then \
 			echo ""; \
 			echo "🔍 Memory Leak Detection: $$d"; \
 			echo "---------------------------------------------"; \
-			$(GO) test -run='TestMemoryLeak|TestIsolateDisposal|TestGoroutineLeak' -v -timeout=5m $$d || exit 1; \
+			$(GO) test -run='TestMemoryLeak|TestIsolateDisposal|TestGoroutineLeak|TestLeak_|TestScenario_' -v -timeout=5m $$d || exit 1; \
 		fi; \
 	done
 	@echo ""
