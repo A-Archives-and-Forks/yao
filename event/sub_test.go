@@ -164,6 +164,7 @@ func TestSubscribe_StopClearsSubscribers(t *testing.T) {
 }
 
 // drainChan reads up to n events from ch within timeout.
+// Stops early if the channel is closed.
 func drainChan(ch chan *types.Event, n int, timeout time.Duration) []*types.Event {
 	var result []*types.Event
 	timer := time.NewTimer(timeout)
@@ -171,7 +172,10 @@ func drainChan(ch chan *types.Event, n int, timeout time.Duration) []*types.Even
 
 	for range n {
 		select {
-		case ev := <-ch:
+		case ev, ok := <-ch:
+			if !ok {
+				return result
+			}
 			result = append(result, ev)
 		case <-timer.C:
 			return result
