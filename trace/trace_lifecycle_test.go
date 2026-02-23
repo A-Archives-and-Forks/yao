@@ -186,9 +186,10 @@ func TestConcurrentReleaseAndMarkCancelled(t *testing.T) {
 	}
 }
 
-// TestSafeSendAfterClosed verifies that operations using safeSend after
-// Release return gracefully instead of panicking.
-func TestSafeSendAfterClosed(t *testing.T) {
+// TestOperationsAfterRelease verifies that using a manager reference after
+// Release does not panic. The manager is removed from registry but its
+// in-memory state remains valid (no channel close or context cancel).
+func TestOperationsAfterRelease(t *testing.T) {
 	drivers := trace.GetTestDrivers()
 
 	for _, d := range drivers {
@@ -205,21 +206,13 @@ func TestSafeSendAfterClosed(t *testing.T) {
 			err = trace.Release(traceID)
 			assert.NoError(t, err)
 
-			// All of these internally use safeSend. After Release they should
-			// return nil/error/zero-value, never panic.
-			manager.Info("post-close info")
-			manager.Debug("post-close debug")
-			manager.Error("post-close error")
-			manager.Warn("post-close warn")
+			// After Release, the manager object is still usable (state in memory).
+			// These calls should not panic.
+			manager.Info("post-release info")
+			manager.Debug("post-release debug")
 
 			root, _ := manager.GetRootNode()
-			assert.Nil(t, root)
-
-			nodes, _ := manager.GetCurrentNodes()
-			assert.Nil(t, nodes)
-
-			status := manager.IsComplete()
-			assert.True(t, status)
+			assert.NotNil(t, root)
 		})
 	}
 }

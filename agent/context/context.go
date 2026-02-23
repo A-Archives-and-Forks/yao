@@ -71,19 +71,21 @@ func (ctx *Context) Release() {
 		ctx.Interrupt = nil
 	}
 
-	// Complete and release trace if exists
+	// Complete and release trace if exists.
+	// Only the root context (non-forked) owns the trace lifecycle.
+	// Forked contexts share the same trace manager but must not release it.
 	if ctx.trace != nil && ctx.Stack != nil && ctx.Stack.TraceID != "" {
-		if ctx.Logger != nil {
-			ctx.Logger.Cleanup("Trace: " + ctx.Stack.TraceID)
-		}
-
-		// Check if context is cancelled - if so, mark as cancelled instead of complete
-		if ctx.Context != nil && ctx.Context.Err() != nil {
-			trace.MarkCancelled(ctx.Stack.TraceID, ctx.Context.Err().Error())
-			trace.Release(ctx.Stack.TraceID)
-		} else {
-			ctx.trace.MarkComplete()
-			trace.Release(ctx.Stack.TraceID)
+		if ctx.ForkParent == nil {
+			if ctx.Logger != nil {
+				ctx.Logger.Cleanup("Trace: " + ctx.Stack.TraceID)
+			}
+			if ctx.Context != nil && ctx.Context.Err() != nil {
+				trace.MarkCancelled(ctx.Stack.TraceID, ctx.Context.Err().Error())
+				trace.Release(ctx.Stack.TraceID)
+			} else {
+				ctx.trace.MarkComplete()
+				trace.Release(ctx.Stack.TraceID)
+			}
 		}
 		ctx.trace = nil
 	}
@@ -191,7 +193,7 @@ func (ctx *Context) Fork() *Context {
 
 		// Create independent resources to avoid race conditions
 		IDGenerator:     message.NewIDGenerator(),
-		Logger:          NewRequestLogger(ctx.AssistantID, ctx.ChatID, childID),
+		Logger:          NewRequestLogger(ctx.AssistantID, ctx.ChatID, childID, WithParentID(ctx.ID)),
 		messageMetadata: newMessageMetadataStore(),
 
 		// Inherit context metadata

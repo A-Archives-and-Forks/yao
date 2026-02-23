@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	agentContext "github.com/yaoapp/yao/agent/context"
+	"github.com/yaoapp/yao/trace/types"
 )
 
 // Orchestrator handles parallel agent calls with different concurrency patterns
@@ -257,12 +258,59 @@ func (o *Orchestrator) callAgentWithContext(ctx *agentContext.Context, req *Requ
 		ctxOpts.OnMessage = req.Handler
 	}
 
+	// Add trace node for A2A call using the ORIGINAL parent context's trace
+	// (forked contexts have nil trace and nil Stack, so ctx.Trace() would create a new orphan trace)
+	parentTrace, _ := o.ctx.Trace()
+	var a2aNode types.Node
+	if parentTrace != nil {
+		a2aNode, _ = parentTrace.Add(
+			map[string]any{
+				"agent_id": req.AgentID,
+				"referer":  string(ctx.Referer),
+			},
+			types.TraceNodeOption{
+				Label:       fmt.Sprintf("Agent: %s", req.AgentID),
+				Type:        "agent_call",
+				Icon:        "smart_toy",
+				Description: fmt.Sprintf("A2A call to '%s'", req.AgentID),
+			},
+		)
+	}
+
+	// Notify TUI of A2A call start (use parent requestID so it appears in parent panel)
+	parentRequestID := o.ctx.RequestID()
+	agentContext.SendTUI(agentContext.AgentEventMsg{
+		RequestID: parentRequestID,
+		Event:     agentContext.EventA2AStart,
+		Data:      map[string]interface{}{"target": req.AgentID},
+	})
+
 	// Execute the agent call with the provided context
 	// The agent.Stream method will use the context's Writer for output
 	resp, err := agent.Stream(ctx, req.Messages, ctxOpts)
 	if err != nil {
+		if a2aNode != nil {
+			a2aNode.Fail(err)
+		}
+		agentContext.SendTUI(agentContext.AgentEventMsg{
+			RequestID: parentRequestID,
+			Event:     agentContext.EventA2ADone,
+			Data:      map[string]interface{}{"target": req.AgentID, "error": err.Error()},
+		})
 		return NewResult(req.AgentID, nil, fmt.Errorf("agent call failed: %w", err))
 	}
+
+	if a2aNode != nil {
+		a2aNode.Complete(map[string]any{
+			"agent_id": req.AgentID,
+			"status":   "completed",
+		})
+	}
+	agentContext.SendTUI(agentContext.AgentEventMsg{
+		RequestID: parentRequestID,
+		Event:     agentContext.EventA2ADone,
+		Data:      map[string]interface{}{"target": req.AgentID},
+	})
 
 	return NewResult(req.AgentID, resp, nil)
 }

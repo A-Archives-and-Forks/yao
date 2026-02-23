@@ -103,6 +103,7 @@ func (ast *Assistant) Stream(ctx *context.Context, inputMessages []context.Messa
 
 		// Log end of request
 		ctx.Logger.End(finalStatus == context.StepStatusCompleted, finalError)
+		ctx.Logger.RestoreAssistantID()
 	}()
 
 	// Determine stream handler

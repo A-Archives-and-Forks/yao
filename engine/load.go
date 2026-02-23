@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -24,6 +25,7 @@ import (
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/connector"
 	"github.com/yaoapp/yao/data"
+	"github.com/yaoapp/yao/event"
 	"github.com/yaoapp/yao/flow"
 	"github.com/yaoapp/yao/fs"
 	"github.com/yaoapp/yao/i18n"
@@ -48,6 +50,8 @@ import (
 	"github.com/yaoapp/yao/websocket"
 	"github.com/yaoapp/yao/widget"
 	"github.com/yaoapp/yao/widgets"
+
+	_ "github.com/yaoapp/yao/trace" // register trace handler/listener via init()
 )
 
 // LoadHooks used to load custom widgets/processes
@@ -210,6 +214,14 @@ func Load(cfg config.Config, options LoadOption, progressCallback ...func(string
 	}, callback)
 	if err != nil {
 		warnings = append(warnings, Warning{Widget: "Store", Error: err})
+	}
+
+	// Start Event Service (handlers registered via init(), e.g. trace)
+	err = loadStep("Event", func() error {
+		return event.Start()
+	}, callback)
+	if err != nil {
+		warnings = append(warnings, Warning{Widget: "Event", Error: err})
 	}
 
 	// Load Uploaders
@@ -424,6 +436,9 @@ func Unload() (err error) {
 			log.Printf("[Robot Agent] Warning: failed to stop robot agent system: %v", stopErr)
 		}
 	}
+
+	// Stop Event Service (before runtime, so in-flight handlers can still use V8)
+	event.Stop(context.Background())
 
 	// Stop Runtime
 	err = runtime.Stop()
