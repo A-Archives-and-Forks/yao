@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yaoapp/gou/connector/openai"
+	"github.com/yaoapp/gou/llm"
 	"github.com/yaoapp/gou/store"
 	"github.com/yaoapp/yao/agent/memory"
 	"github.com/yaoapp/yao/agent/output"
@@ -253,7 +253,7 @@ type Context struct {
 	sandboxExecutor SandboxExecutor       `json:"-"` // Sandbox executor for hooks (set by assistant when sandbox is configured)
 
 	// Model capabilities (set by assistant, used by output adapters)
-	Capabilities *openai.Capabilities `json:"-"` // Model capabilities for the current connector
+	Capabilities *llm.Capabilities `json:"-"` // Model capabilities for the current connector
 
 	// Interrupt control (all interrupt-related logic is encapsulated in InterruptController)
 	Interrupt *InterruptController `json:"-"` // Interrupt controller for handling user interrupts during streaming

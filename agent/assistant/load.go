@@ -9,7 +9,6 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
 	"github.com/yaoapp/gou/application"
-	gouOpenAI "github.com/yaoapp/gou/connector/openai"
 	"github.com/yaoapp/gou/fs"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/i18n"
@@ -21,8 +20,7 @@ import (
 // loaded the loaded assistant
 var loaded = NewCache(200) // 200 is the default capacity
 var storage store.Store = nil
-var storeSetting *store.Setting = nil // store setting from agent.yml
-var modelCapabilities map[string]gouOpenAI.Capabilities = map[string]gouOpenAI.Capabilities{}
+var storeSetting *store.Setting = nil            // store setting from agent.yml
 var defaultConnector string = ""                 // default connector
 var globalUses *context.Uses = nil               // global uses configuration from agent.yml
 var globalPrompts []store.Prompt = nil           // global prompts from agent/prompts.yml
@@ -138,11 +136,6 @@ func SetStorage(s store.Store) {
 // GetStorage returns the storage (for testing purposes)
 func GetStorage() store.Store {
 	return storage
-}
-
-// SetModelCapabilities set the model capabilities configuration
-func SetModelCapabilities(capabilities map[string]gouOpenAI.Capabilities) {
-	modelCapabilities = capabilities
 }
 
 // SetConnector set the connector

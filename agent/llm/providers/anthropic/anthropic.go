@@ -9,9 +9,8 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/connector"
-	gouAnthropicConn "github.com/yaoapp/gou/connector/anthropic"
-	gouOpenAI "github.com/yaoapp/gou/connector/openai"
 	"github.com/yaoapp/gou/http"
+	goullm "github.com/yaoapp/gou/llm"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/i18n"
@@ -27,34 +26,15 @@ type Provider struct {
 }
 
 // New create a new Anthropic provider
-func New(conn connector.Connector, capabilities *gouOpenAI.Capabilities) *Provider {
+func New(conn connector.Connector, capabilities *goullm.Capabilities) *Provider {
 	return &Provider{
 		Provider: base.NewProvider(conn, capabilities),
 		adapters: buildAdapters(capabilities),
 	}
 }
 
-// NewFromAnthropicCaps create a new Anthropic provider from Anthropic capabilities
-func NewFromAnthropicCaps(conn connector.Connector, caps *gouAnthropicConn.Capabilities) *Provider {
-	// Convert anthropic capabilities to openai capabilities for base provider compatibility
-	openaiCaps := &gouOpenAI.Capabilities{
-		Vision:                caps.Vision,
-		Audio:                 caps.Audio,
-		ToolCalls:             caps.ToolCalls,
-		Reasoning:             caps.Reasoning,
-		Streaming:             caps.Streaming,
-		JSON:                  caps.JSON,
-		Multimodal:            caps.Multimodal,
-		TemperatureAdjustable: caps.TemperatureAdjustable,
-	}
-	return &Provider{
-		Provider: base.NewProvider(conn, openaiCaps),
-		adapters: buildAdapters(openaiCaps),
-	}
-}
-
 // buildAdapters builds capability adapters based on model capabilities
-func buildAdapters(cap *gouOpenAI.Capabilities) []adapters.CapabilityAdapter {
+func buildAdapters(cap *goullm.Capabilities) []adapters.CapabilityAdapter {
 	if cap == nil {
 		return []adapters.CapabilityAdapter{}
 	}

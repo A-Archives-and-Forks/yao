@@ -6,7 +6,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/connector"
-	"github.com/yaoapp/gou/connector/openai"
+	goullm "github.com/yaoapp/gou/llm"
 	"github.com/yaoapp/yao/agent/assistant/handlers"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/i18n"
@@ -570,7 +570,7 @@ func (ast *Assistant) Stream(ctx *context.Context, inputMessages []context.Messa
 // GetConnector get the connector object, capabilities, and error with priority: opts.Connector > ast.Connector
 // Note: opts.Connector may be set by Create hook's applyOptionsAdjustments
 // Returns: (connector, capabilities, error)
-func (ast *Assistant) GetConnector(ctx *context.Context, opts ...*context.Options) (connector.Connector, *openai.Capabilities, error) {
+func (ast *Assistant) GetConnector(ctx *context.Context, opts ...*context.Options) (connector.Connector, *goullm.Capabilities, error) {
 	// Determine connector ID with priority: opts.Connector > ast.Connector
 	connectorID := ast.Connector
 	if len(opts) > 0 && opts[0] != nil && opts[0].Connector != "" {
@@ -588,9 +588,7 @@ func (ast *Assistant) GetConnector(ctx *context.Context, opts ...*context.Option
 		return nil, nil, err
 	}
 
-	// Get connector capabilities from settings
-	// Uses unified capability getter: 1. User-defined models.yml, 2. connector's Setting()["capabilities"], 3. default
-	capabilities := llm.GetCapabilitiesFromConn(conn, modelCapabilities)
+	capabilities := llm.GetCapabilitiesFromConn(conn)
 
 	return conn, capabilities, nil
 }

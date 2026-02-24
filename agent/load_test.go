@@ -54,12 +54,6 @@ func TestLoad(t *testing.T) {
 		assert.Contains(t, agent.GlobalPrompts[0].Content, "$SYS.")
 	})
 
-	t.Run("LoadModelCapabilities", func(t *testing.T) {
-		// Model capabilities should be loaded from agent/models.yml
-		assert.NotNil(t, agent.Models)
-		assert.Greater(t, len(agent.Models), 0)
-	})
-
 	t.Run("LoadKBConfig", func(t *testing.T) {
 		// KB configuration should be loaded from agent/kb.yml
 		assert.NotNil(t, agent.KB)

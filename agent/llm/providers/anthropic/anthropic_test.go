@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/yaoapp/gou/connector"
-	"github.com/yaoapp/gou/connector/openai"
+	goullm "github.com/yaoapp/gou/llm"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/llm"
 	"github.com/yaoapp/yao/agent/output/message"
@@ -34,9 +34,8 @@ func TestAnthropicStreamBasic(t *testing.T) {
 		t.Fatal("Connector is not ANTHROPIC type")
 	}
 
-	// Use openai.Capabilities — SelectProvider auto-detects Anthropic format from connector type
 	options := &context.CompletionOptions{
-		Capabilities: &openai.Capabilities{
+		Capabilities: &goullm.Capabilities{
 			Streaming: true,
 			ToolCalls: true,
 		},
@@ -111,7 +110,7 @@ func TestAnthropicStreamWithToolCalls(t *testing.T) {
 	}
 
 	options := &context.CompletionOptions{
-		Capabilities: &openai.Capabilities{
+		Capabilities: &goullm.Capabilities{
 			Streaming: true,
 			ToolCalls: true,
 		},
@@ -226,7 +225,7 @@ func TestAnthropicStreamRetry(t *testing.T) {
 	}
 
 	options := &context.CompletionOptions{
-		Capabilities: &openai.Capabilities{
+		Capabilities: &goullm.Capabilities{
 			Streaming: true,
 			ToolCalls: true,
 		},
