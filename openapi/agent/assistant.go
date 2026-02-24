@@ -117,7 +117,7 @@ func ListAssistants(c *gin.Context) {
 	}
 
 	// Parse boolean filters
-	var builtIn, mentionable, automated *bool
+	var builtIn, mentionable, automated, sandbox *bool
 	if builtInParam := c.Query("built_in"); builtInParam != "" {
 		builtIn = parseBoolValue(builtInParam)
 	}
@@ -126,6 +126,9 @@ func ListAssistants(c *gin.Context) {
 	}
 	if automatedParam := c.Query("automated"); automatedParam != "" {
 		automated = parseBoolValue(automatedParam)
+	}
+	if sandboxParam := c.Query("sandbox"); sandboxParam != "" {
+		sandbox = parseBoolValue(sandboxParam)
 	}
 
 	// Note: public and share filters are not yet supported in AssistantFilter
@@ -152,6 +155,7 @@ func ListAssistants(c *gin.Context) {
 		BuiltIn:      builtIn,
 		Mentionable:  mentionable,
 		Automated:    automated,
+		Sandbox:      sandbox,
 	})
 
 	// Apply permission-based filtering (Scope filtering)
@@ -169,12 +173,19 @@ func ListAssistants(c *gin.Context) {
 		return
 	}
 
-	// Filter sensitive fields for built-in assistants
-	// For built-in assistants, clear code-level fields (prompts, workflow, tools, kb, mcp, options)
-	FilterBuiltInFields(result.Data)
+	// Convert sandbox to boolean and filter built-in sensitive fields
+	resp := map[string]interface{}{
+		"data":      AssistantsToResponse(result.Data),
+		"total":     result.Total,
+		"page":      result.Page,
+		"pagesize":  result.PageSize,
+		"pagecount": result.PageCount,
+		"next":      result.Next,
+		"prev":      result.Prev,
+	}
 
 	// Return the result with standard response format
-	response.RespondWithSuccess(c, response.StatusOK, result)
+	response.RespondWithSuccess(c, response.StatusOK, resp)
 }
 
 // GetAssistant retrieves a single assistant by ID with permission verification
@@ -260,11 +271,13 @@ func GetAssistant(c *gin.Context) {
 		return
 	}
 
-	// Filter sensitive fields for built-in assistants
+	// Convert sandbox to boolean and filter built-in sensitive fields
+	hasSandbox := assistant.Sandbox != nil
 	FilterBuiltInAssistant(assistant)
+	resp := AssistantToResponse(assistant, hasSandbox)
 
 	// Return the result with standard response format
-	response.RespondWithSuccess(c, response.StatusOK, assistant)
+	response.RespondWithSuccess(c, response.StatusOK, resp)
 }
 
 // ListAssistantTags lists assistant tags with permission-based filtering

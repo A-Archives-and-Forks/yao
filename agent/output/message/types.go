@@ -3,7 +3,7 @@ package message
 import (
 	"net/http"
 
-	"github.com/yaoapp/gou/connector/openai"
+	"github.com/yaoapp/gou/llm"
 	traceTypes "github.com/yaoapp/yao/trace/types"
 )
 
@@ -13,7 +13,7 @@ type Options struct {
 	Accept       string
 	Writer       http.ResponseWriter
 	Trace        traceTypes.Manager
-	Capabilities *openai.Capabilities
+	Capabilities *llm.Capabilities
 	Locale       string
 }
 

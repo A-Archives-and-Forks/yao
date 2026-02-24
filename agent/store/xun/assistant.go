@@ -99,6 +99,11 @@ func (store *Xun) SaveAssistant(assistant *types.AssistantModel) (string, error)
 	} else {
 		data["description"] = nil
 	}
+	if assistant.Capabilities != "" {
+		data["capabilities"] = assistant.Capabilities
+	} else {
+		data["capabilities"] = nil
+	}
 	if assistant.Path != "" {
 		data["path"] = assistant.Path
 	} else {
@@ -181,6 +186,7 @@ func (store *Xun) SaveAssistant(assistant *types.AssistantModel) (string, error)
 		"db":                assistant.DB,
 		"mcp":               assistant.MCP,
 		"workflow":          assistant.Workflow,
+		"sandbox":           assistant.Sandbox,
 		"placeholder":       assistant.Placeholder,
 		"locales":           assistant.Locales,
 		"uses":              assistant.Uses,
@@ -243,14 +249,14 @@ func (store *Xun) UpdateAssistant(assistantID string, updates map[string]interfa
 	data := make(map[string]interface{})
 
 	// List of fields that need JSON marshaling
-	jsonFields := []string{"options", "tags", "modes", "prompts", "prompt_presets", "connector_options", "kb", "db", "mcp", "workflow", "placeholder", "locales", "uses", "search"}
+	jsonFields := []string{"options", "tags", "modes", "prompts", "prompt_presets", "connector_options", "kb", "db", "mcp", "workflow", "sandbox", "placeholder", "locales", "uses", "search"}
 	jsonFieldSet := make(map[string]bool)
 	for _, field := range jsonFields {
 		jsonFieldSet[field] = true
 	}
 
 	// List of nullable string fields
-	nullableStringFields := []string{"name", "avatar", "description", "path", "source", "default_mode", "__yao_created_by", "__yao_updated_by", "__yao_team_id", "__yao_tenant_id"}
+	nullableStringFields := []string{"name", "avatar", "description", "capabilities", "path", "source", "default_mode", "__yao_created_by", "__yao_updated_by", "__yao_team_id", "__yao_tenant_id"}
 	nullableFieldSet := make(map[string]bool)
 	for _, field := range nullableStringFields {
 		nullableFieldSet[field] = true
@@ -349,6 +355,7 @@ func (store *Xun) GetAssistants(filter types.AssistantFilter, locale ...string) 
 		qb.Where(func(qb query.Query) {
 			qb.Where("name", "like", fmt.Sprintf("%%%s%%", filter.Keywords)).
 				OrWhere("description", "like", fmt.Sprintf("%%%s%%", filter.Keywords)).
+				OrWhere("capabilities", "like", fmt.Sprintf("%%%s%%", filter.Keywords)).
 				OrWhere("locales", "like", fmt.Sprintf("%%%s%%", filter.Keywords))
 		})
 	}
@@ -391,6 +398,21 @@ func (store *Xun) GetAssistants(filter types.AssistantFilter, locale ...string) 
 	// Apply built_in filter if provided
 	if filter.BuiltIn != nil {
 		qb.Where("built_in", *filter.BuiltIn)
+	}
+
+	// Apply sandbox filter (true = has sandbox config, false = no sandbox config)
+	// MySQL JSON columns distinguish between SQL NULL and JSON literal null.
+	// CAST(sandbox AS CHAR) returns 'null' for JSON null and NULL for SQL NULL.
+	if filter.Sandbox != nil {
+		if *filter.Sandbox {
+			qb.WhereNotNull("sandbox").
+				WhereRaw("CAST(`sandbox` AS CHAR) <> 'null'")
+		} else {
+			qb.Where(func(qb query.Query) {
+				qb.WhereNull("sandbox").
+					OrWhereRaw("CAST(`sandbox` AS CHAR) = 'null'")
+			})
+		}
 	}
 
 	// Apply custom query filter function (for permission filtering)
@@ -448,7 +470,7 @@ func (store *Xun) GetAssistants(filter types.AssistantFilter, locale ...string) 
 
 	// Convert rows to types.AssistantModel slice
 	assistants := make([]*types.AssistantModel, 0, len(rows))
-	jsonFields := []string{"tags", "options", "prompts", "prompt_presets", "connector_options", "workflow", "kb", "mcp", "placeholder", "locales", "uses", "search"}
+	jsonFields := []string{"tags", "options", "prompts", "prompt_presets", "connector_options", "workflow", "sandbox", "kb", "mcp", "placeholder", "locales", "uses", "search"}
 
 	for _, row := range rows {
 		data := row.ToMap()
@@ -521,7 +543,7 @@ func (store *Xun) GetAssistant(assistantID string, fields []string, locale ...st
 	}
 
 	// Parse JSON fields
-	jsonFields := []string{"tags", "modes", "options", "prompts", "prompt_presets", "connector_options", "workflow", "kb", "db", "mcp", "placeholder", "locales", "uses", "search"}
+	jsonFields := []string{"tags", "modes", "options", "prompts", "prompt_presets", "connector_options", "workflow", "sandbox", "kb", "db", "mcp", "placeholder", "locales", "uses", "search"}
 	store.parseJSONFields(data, jsonFields)
 
 	// Convert map to types.AssistantModel
@@ -536,6 +558,7 @@ func (store *Xun) GetAssistant(assistantID string, fields []string, locale ...st
 		BuiltIn:              getBool(data, "built_in"),
 		Sort:                 getInt(data, "sort"),
 		Description:          getString(data, "description"),
+		Capabilities:         getString(data, "capabilities"),
 		DefaultMode:          getString(data, "default_mode"),
 		Readonly:             getBool(data, "readonly"),
 		Public:               getBool(data, "public"),
@@ -633,6 +656,13 @@ func (store *Xun) GetAssistant(assistantID string, fields []string, locale ...st
 		wf, err := types.ToWorkflow(workflow)
 		if err == nil {
 			model.Workflow = wf
+		}
+	}
+
+	if sandbox, has := data["sandbox"]; has && sandbox != nil {
+		sb, err := types.ToSandbox(sandbox)
+		if err == nil {
+			model.Sandbox = sb
 		}
 	}
 
@@ -836,6 +866,13 @@ func (store *Xun) translate(model *types.AssistantModel, assistantID string, loc
 	if translated := i18n.Translate(assistantID, locale, model.Description); translated != nil {
 		if s, ok := translated.(string); ok {
 			model.Description = s
+		}
+	}
+
+	// Translate capabilities
+	if translated := i18n.Translate(assistantID, locale, model.Capabilities); translated != nil {
+		if s, ok := translated.(string); ok {
+			model.Capabilities = s
 		}
 	}
 

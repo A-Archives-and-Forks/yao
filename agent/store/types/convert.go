@@ -291,6 +291,9 @@ func ToAssistantModel(v interface{}) (*AssistantModel, error) {
 	if description, ok := data["description"].(string); ok {
 		model.Description = description
 	}
+	if capabilities, ok := data["capabilities"].(string); ok {
+		model.Capabilities = capabilities
+	}
 	if share, ok := data["share"].(string); ok {
 		model.Share = share
 	}
@@ -418,6 +421,14 @@ func ToAssistantModel(v interface{}) (*AssistantModel, error) {
 		wf, err := ToWorkflow(workflow)
 		if err == nil {
 			model.Workflow = wf
+		}
+	}
+
+	// Sandbox
+	if sandbox, ok := data["sandbox"]; ok && sandbox != nil {
+		sb, err := ToSandbox(sandbox)
+		if err == nil {
+			model.Sandbox = sb
 		}
 	}
 

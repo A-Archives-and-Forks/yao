@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/yaoapp/gou/connector"
-	gouAnthropicConn "github.com/yaoapp/gou/connector/anthropic"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/llm/providers/anthropic"
 	"github.com/yaoapp/yao/agent/llm/providers/openai"
@@ -43,13 +42,6 @@ func SelectProvider(conn connector.Connector, options *context.CompletionOptions
 		return openai.New(conn, options.Capabilities), nil
 
 	case "anthropic":
-		// Anthropic Messages API (Claude, Kimi Code, etc.)
-		// Check if connector has native Anthropic capabilities
-		settings := conn.Setting()
-		if caps, ok := settings["capabilities"].(*gouAnthropicConn.Capabilities); ok {
-			return anthropic.NewFromAnthropicCaps(conn, caps), nil
-		}
-		// Fallback: use OpenAI capabilities (converted from connector settings)
 		return anthropic.New(conn, options.Capabilities), nil
 
 	default:

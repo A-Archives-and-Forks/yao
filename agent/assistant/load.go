@@ -9,7 +9,6 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
 	"github.com/yaoapp/gou/application"
-	gouOpenAI "github.com/yaoapp/gou/connector/openai"
 	"github.com/yaoapp/gou/fs"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/i18n"
@@ -21,8 +20,7 @@ import (
 // loaded the loaded assistant
 var loaded = NewCache(200) // 200 is the default capacity
 var storage store.Store = nil
-var storeSetting *store.Setting = nil // store setting from agent.yml
-var modelCapabilities map[string]gouOpenAI.Capabilities = map[string]gouOpenAI.Capabilities{}
+var storeSetting *store.Setting = nil            // store setting from agent.yml
 var defaultConnector string = ""                 // default connector
 var globalUses *context.Uses = nil               // global uses configuration from agent.yml
 var globalPrompts []store.Prompt = nil           // global prompts from agent/prompts.yml
@@ -138,11 +136,6 @@ func SetStorage(s store.Store) {
 // GetStorage returns the storage (for testing purposes)
 func GetStorage() store.Store {
 	return storage
-}
-
-// SetModelCapabilities set the model capabilities configuration
-func SetModelCapabilities(capabilities map[string]gouOpenAI.Capabilities) {
-	modelCapabilities = capabilities
 }
 
 // SetConnector set the connector
@@ -564,6 +557,11 @@ func loadMap(data map[string]interface{}) (*Assistant, error) {
 		assistant.Description = v
 	}
 
+	// capabilities
+	if v, ok := data["capabilities"].(string); ok {
+		assistant.Capabilities = v
+	}
+
 	// locales
 	if locales, ok := data["locales"].(i18n.Map); ok {
 		assistant.Locales = locales
@@ -575,30 +573,39 @@ func loadMap(data map[string]interface{}) (*Assistant, error) {
 			if i18nObj.Messages == nil {
 				i18nObj.Messages = make(map[string]any)
 			}
-			// Add name and description if not already present
+			// Add name, description, and capabilities if not already present
 			if _, exists := i18nObj.Messages["name"]; !exists && assistant.Name != "" {
 				i18nObj.Messages["name"] = assistant.Name
 			}
 			if _, exists := i18nObj.Messages["description"]; !exists && assistant.Description != "" {
 				i18nObj.Messages["description"] = assistant.Description
 			}
+			if _, exists := i18nObj.Messages["capabilities"]; !exists && assistant.Capabilities != "" {
+				i18nObj.Messages["capabilities"] = assistant.Capabilities
+			}
 			flattened[locale] = i18nObj
 		}
 
 		i18n.Locales[id] = flattened
 	} else {
-		// No locales defined, create default with name and description for all common locales
-		if assistant.Name != "" || assistant.Description != "" {
+		// No locales defined, create default with name, description, and capabilities for all common locales
+		if assistant.Name != "" || assistant.Description != "" || assistant.Capabilities != "" {
 			defaultLocales := make(map[string]i18n.I18n)
-			// Create entries for all common locales so {{name}} can be resolved
 			commonLocales := []string{"en", "en-us", "zh", "zh-cn", "zh-tw"}
 			for _, locale := range commonLocales {
+				messages := map[string]any{}
+				if assistant.Name != "" {
+					messages["name"] = assistant.Name
+				}
+				if assistant.Description != "" {
+					messages["description"] = assistant.Description
+				}
+				if assistant.Capabilities != "" {
+					messages["capabilities"] = assistant.Capabilities
+				}
 				defaultLocales[locale] = i18n.I18n{
-					Locale: locale,
-					Messages: map[string]any{
-						"name":        assistant.Name,
-						"description": assistant.Description,
-					},
+					Locale:   locale,
+					Messages: messages,
 				}
 			}
 			i18n.Locales[id] = defaultLocales

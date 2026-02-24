@@ -54,14 +54,25 @@ func (sm *subManager) subscribe(pattern string, ch chan<- *types.Event, opts ...
 	return id
 }
 
-// unsubscribe removes a subscriber by ID.
+// unsubscribe removes a subscriber by ID and closes its channel
+// so that any goroutine blocked on `range ch` will unblock and exit.
 func (sm *subManager) unsubscribe(id string) {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
+	entry, ok := sm.entries[id]
 	delete(sm.entries, id)
+	sm.mu.Unlock()
+
+	if ok && entry.ch != nil {
+		func() {
+			defer func() { recover() }()
+			close(entry.ch)
+		}()
+	}
 }
 
 // notify sends an event to all matching subscribers (non-blocking).
+// Recovers from send-on-closed-channel panics that may occur if
+// unsubscribe closes a channel concurrently.
 func (sm *subManager) notify(ev *types.Event) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -73,19 +84,31 @@ func (sm *subManager) notify(ev *types.Event) {
 		if entry.filter != nil && !entry.filter(ev) {
 			continue
 		}
-		select {
-		case entry.ch <- ev:
-		default:
-			// Subscriber chan full, skip (non-blocking)
-		}
+		func() {
+			defer func() { recover() }()
+			select {
+			case entry.ch <- ev:
+			default:
+			}
+		}()
 	}
 }
 
-// clear removes all subscribers. Used during Stop.
+// clear removes all subscribers and closes their channels. Used during Stop.
 func (sm *subManager) clear() {
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
+	old := sm.entries
 	sm.entries = make(map[string]*subEntry)
+	sm.mu.Unlock()
+
+	for _, entry := range old {
+		if entry.ch != nil {
+			func() {
+				defer func() { recover() }()
+				close(entry.ch)
+			}()
+		}
+	}
 }
 
 // Subscribe dynamically subscribes to events matching the given pattern.
