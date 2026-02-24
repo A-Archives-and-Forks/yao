@@ -6,6 +6,7 @@ import (
 
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/connector"
+	"github.com/yaoapp/gou/helper"
 	"github.com/yaoapp/yao/agent/assistant"
 	"github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/i18n"
@@ -45,6 +46,9 @@ func Load(cfg config.Config) error {
 	if setting.StoreSetting.MaxSize == 0 {
 		setting.StoreSetting.MaxSize = 20 // default is 20
 	}
+
+	// Resolve $ENV.XXX references in system and uses fields
+	resolveEnvStrings(&setting)
 
 	// Default Assistant, Agent is the developer name, Mohe is the brand name of the assistant
 	if setting.Uses == nil {
@@ -443,4 +447,37 @@ func defaultAssistant() (*assistant.Assistant, error) {
 		return nil, fmt.Errorf("default assistant not found")
 	}
 	return assistant.Get(agentDSL.Uses.Default)
+}
+
+// resolveEnvStrings resolves $ENV.XXX references in agent.yml string fields.
+// agent.yml is parsed via yaml.Unmarshal which does not handle $ENV substitution,
+// unlike connector files which call helper.EnvString explicitly during Register.
+func resolveEnvStrings(setting *types.DSL) {
+	if setting.System != nil {
+		setting.System.Default = helper.EnvString(setting.System.Default)
+		setting.System.Keyword = helper.EnvString(setting.System.Keyword)
+		setting.System.QueryDSL = helper.EnvString(setting.System.QueryDSL)
+		setting.System.Title = helper.EnvString(setting.System.Title)
+		setting.System.Prompt = helper.EnvString(setting.System.Prompt)
+		setting.System.RobotPrompt = helper.EnvString(setting.System.RobotPrompt)
+		setting.System.NeedSearch = helper.EnvString(setting.System.NeedSearch)
+		setting.System.Entity = helper.EnvString(setting.System.Entity)
+	}
+
+	if setting.Uses != nil {
+		setting.Uses.Default = helper.EnvString(setting.Uses.Default)
+		setting.Uses.Title = helper.EnvString(setting.Uses.Title)
+		setting.Uses.Prompt = helper.EnvString(setting.Uses.Prompt)
+		setting.Uses.RobotPrompt = helper.EnvString(setting.Uses.RobotPrompt)
+		setting.Uses.Vision = helper.EnvString(setting.Uses.Vision)
+		setting.Uses.Audio = helper.EnvString(setting.Uses.Audio)
+		setting.Uses.Search = helper.EnvString(setting.Uses.Search)
+		setting.Uses.Fetch = helper.EnvString(setting.Uses.Fetch)
+		setting.Uses.Web = helper.EnvString(setting.Uses.Web)
+		setting.Uses.Keyword = helper.EnvString(setting.Uses.Keyword)
+		setting.Uses.QueryDSL = helper.EnvString(setting.Uses.QueryDSL)
+		setting.Uses.Rerank = helper.EnvString(setting.Uses.Rerank)
+	}
+
+	setting.Cache = helper.EnvString(setting.Cache)
 }
