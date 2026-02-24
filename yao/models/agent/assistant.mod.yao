@@ -74,6 +74,15 @@
       "index": true
     },
     {
+      "name": "capabilities",
+      "type": "string",
+      "label": "Capabilities",
+      "comment": "Assistant capabilities description, useful for Robot orchestration",
+      "length": 600,
+      "nullable": true,
+      "index": true
+    },
+    {
       "name": "path",
       "type": "string",
       "label": "Path",
@@ -159,6 +168,13 @@
       "type": "json",
       "label": "MCP Servers",
       "comment": "MCP servers available for the assistant to use",
+      "nullable": true
+    },
+    {
+      "name": "sandbox",
+      "type": "json",
+      "label": "Sandbox",
+      "comment": "Sandbox configuration for coding agents (command, image, timeout, etc.)",
       "nullable": true
     },
     {

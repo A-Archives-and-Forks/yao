@@ -20,10 +20,12 @@ var AssistantAllowedFields = map[string]bool{
 	"prompts":                true,
 	"prompt_presets":         true,
 	"disable_global_prompts": true,
+	"capabilities":           true,
 	"workflow":               true,
 	"kb":                     true,
 	"db":                     true,
 	"mcp":                    true,
+	"sandbox":                true,
 	"source":                 true,
 	"tags":                   true,
 	"modes":                  true,
@@ -53,6 +55,7 @@ var AssistantDefaultFields = []string{
 	"avatar",
 	"connector",
 	"description",
+	"capabilities", // Capabilities description for Robot orchestration (lightweight)
 	"tags",         // Tags for categorization (lightweight)
 	"modes",        // Supported modes (lightweight)
 	"default_mode", // Default mode (lightweight)
@@ -63,9 +66,10 @@ var AssistantDefaultFields = []string{
 	"share",
 	"automated",
 	"mentionable",
-	"kb",  // Knowledge base configuration (lightweight)
-	"db",  // Database configuration (lightweight)
-	"mcp", // MCP servers configuration (lightweight)
+	"sandbox", // Sandbox configuration presence (lightweight)
+	"kb",      // Knowledge base configuration (lightweight)
+	"db",      // Database configuration (lightweight)
+	"mcp",     // MCP servers configuration (lightweight)
 	"created_at",
 	"updated_at",
 	"__yao_created_by", // Permission: creator user ID
@@ -84,6 +88,7 @@ var AssistantFullFields = []string{
 	"connector",
 	"connector_options",
 	"description",
+	"capabilities",
 	"path",
 	"sort",
 	"built_in",
@@ -96,6 +101,7 @@ var AssistantFullFields = []string{
 	"kb",
 	"db",
 	"mcp",
+	"sandbox",
 	"source",
 	"tags",
 	"modes",

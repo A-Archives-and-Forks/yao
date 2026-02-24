@@ -183,6 +183,7 @@ type AssistantFilter struct {
 	Mentionable  *bool             `json:"mentionable,omitempty"`   // Filter by mentionable status
 	Automated    *bool             `json:"automated,omitempty"`     // Filter by automation status
 	BuiltIn      *bool             `json:"built_in,omitempty"`      // Filter by built-in status
+	Sandbox      *bool             `json:"sandbox,omitempty"`       // Filter by sandbox configuration (true=has sandbox, false=no sandbox)
 	Page         int               `json:"page,omitempty"`          // Page number, starting from 1
 	PageSize     int               `json:"pagesize,omitempty"`      // Items per page
 	Select       []string          `json:"select,omitempty"`        // Fields to return, returns all fields if empty
@@ -429,6 +430,7 @@ type AssistantModel struct {
 	BuiltIn              bool                   `json:"built_in,omitempty"`               // Whether this is a built-in assistant
 	Sort                 int                    `json:"sort,omitempty"`                   // Assistant Sort
 	Description          string                 `json:"description,omitempty"`            // Assistant Description
+	Capabilities         string                 `json:"capabilities,omitempty"`           // Assistant capabilities description (useful for Robot orchestration)
 	Tags                 []string               `json:"tags,omitempty"`                   // Assistant Tags
 	Modes                []string               `json:"modes,omitempty"`                  // Supported modes (e.g., ["task", "chat"]), null means all modes are supported
 	DefaultMode          string                 `json:"default_mode,omitempty"`           // Default mode, can be empty
