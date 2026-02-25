@@ -13,12 +13,12 @@ OS := $(shell uname)
 TESTFOLDER := $(shell $(GO) list ./... | grep -vE 'examples|openai|aigc|neo|twilio|share*' | awk '!/\/tests\// || /openapi\/tests/')
 # Core tests (exclude AI-related: agent, aigc, openai, KB, and sandbox which requires Docker)
 TESTFOLDER_CORE := $(shell $(GO) list ./... | grep -vE 'examples|openai|aigc|neo|twilio|share*|agent|kb|sandbox' | awk '!/\/tests\// || /openapi\/tests/')
-# AI tests (agent, aigc) - exclude agent/search/handlers/web (requires external API keys) and robot/api E2E tests
-TESTFOLDER_AI := $(shell $(GO) list ./agent/... ./aigc/... | grep -v 'agent/search/handlers/web')
+# Agent tests (agent, aigc) - exclude agent/search/handlers/web (requires external API keys) and robot packages (tested in robot job)
+TESTFOLDER_AGENT := $(shell $(GO) list ./agent/... ./aigc/... | grep -vE 'agent/search/handlers/web|agent/robot/')
 # KB tests (kb)
 TESTFOLDER_KB := $(shell $(GO) list ./kb/...)
-# Robot E2E tests (agent/robot/api) - runs TestE2E* tests with real LLM calls
-TESTFOLDER_ROBOT_E2E := $(shell $(GO) list ./agent/robot/api/...)
+# Robot tests (all agent/robot/... packages) - runs ALL tests (unit + E2E) with real LLM calls
+TESTFOLDER_ROBOT := $(shell $(GO) list ./agent/robot/...)
 # Sandbox tests (requires Docker)
 TESTFOLDER_SANDBOX := $(shell $(GO) list ./sandbox/...)
 TESTTAGS ?= ""
@@ -77,12 +77,12 @@ unit-test-core:
 		fi; \
 	done
 
-# AI Unit Test (agent, aigc) - excludes TestE2E* (run separately in unit-test-robot-e2e)
-.PHONY: unit-test-ai
-unit-test-ai:
+# Agent Unit Test (agent, aigc) - excludes robot packages (tested in unit-test-robot) and TestE2E*
+.PHONY: unit-test-agent
+unit-test-agent:
 	echo "mode: count" > coverage.out
-	for d in $(TESTFOLDER_AI); do \
-		$(GO) test -tags $(TESTTAGS) -v -timeout=20m -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal|TestE2E' $$d > tmp.out; \
+	for d in $(TESTFOLDER_AGENT); do \
+		$(GO) test -tags $(TESTTAGS) -v -timeout=50m -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal|TestE2E' $$d > tmp.out; \
 		cat tmp.out; \
 		if grep -q "^--- FAIL" tmp.out; then \
 			rm tmp.out; \
@@ -141,13 +141,13 @@ unit-test-kb:
 		fi; \
 	done
 
-# Robot E2E Test (agent/robot/api) - runs TestE2E* tests with real LLM calls
+# Robot Test (all agent/robot/... packages) - runs ALL tests (unit + E2E) with real LLM calls
 # These tests require: LLM API keys, database, and longer timeout
-.PHONY: unit-test-robot-e2e
-unit-test-robot-e2e:
+.PHONY: unit-test-robot
+unit-test-robot:
 	echo "mode: count" > coverage.out
-	for d in $(TESTFOLDER_ROBOT_E2E); do \
-		$(GO) test -tags $(TESTTAGS) -v -timeout=30m -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -run='TestE2E' $$d > tmp.out; \
+	for d in $(TESTFOLDER_ROBOT); do \
+		$(GO) test -tags $(TESTTAGS) -v -timeout=50m -covermode=count -coverprofile=profile.out -coverpkg=$$(echo $$d | sed "s/\/test$$//g") -skip='TestMemoryLeak|TestIsolateDisposal' $$d > tmp.out; \
 		cat tmp.out; \
 		if grep -q "^--- FAIL" tmp.out; then \
 			rm tmp.out; \

@@ -78,13 +78,12 @@ func TestDetectNeedMoreInfo(t *testing.T) {
 		assert.Empty(t, question)
 	})
 
-	t.Run("handles nested data structure in Next", func(t *testing.T) {
+	t.Run("unwraps data envelope from Next hook", func(t *testing.T) {
 		result := &CallResult{
 			Next: map[string]interface{}{
-				"status":   "need_input",
-				"question": "Which database should I query?",
 				"data": map[string]interface{}{
-					"options": []interface{}{"db1", "db2"},
+					"status":   "need_input",
+					"question": "Which database should I query?",
 				},
 			},
 		}
