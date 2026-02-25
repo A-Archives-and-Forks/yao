@@ -98,6 +98,7 @@ func TestAdjustExecution(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-hl2",
 			MemberID:    "member-hl2",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -119,6 +120,7 @@ func TestAdjustExecution(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-hl3",
 			MemberID:    "member-hl3",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -153,6 +155,7 @@ func TestAdjustExecution(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-hl4",
 			MemberID:    "member-hl4",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -176,6 +179,7 @@ func TestInjectTask(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-hl5",
 			MemberID:    "member-hl5",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -198,6 +202,7 @@ func TestInjectTask(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-hl6",
 			MemberID:    "member-hl6",
+			TriggerType: types.TriggerHuman,
 			Tasks: []types.Task{
 				{ID: "existing-1", Description: "Existing"},
 			},
@@ -232,6 +237,7 @@ func TestInjectTask(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-hl6b",
 			MemberID:    "member-hl6b",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -339,6 +345,7 @@ func TestProcessHostActionAdjust(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-pa2",
 			MemberID:    "member-pa-adj",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -360,6 +367,7 @@ func TestProcessHostActionAdjust(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-pa3",
 			MemberID:    "member-pa-adj",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -381,6 +389,7 @@ func TestProcessHostActionAdjust(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-pa4",
 			MemberID:    "member-pa-adj",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -411,6 +420,7 @@ func TestProcessHostActionAddTask(t *testing.T) {
 		record := &store.ExecutionRecord{
 			ExecutionID: "exec-pa5",
 			MemberID:    "member-pa-at",
+			TriggerType: types.TriggerHuman,
 		}
 		execStore := store.NewExecutionStore()
 		_ = execStore.Save(ctx.Context, record)
@@ -779,6 +789,7 @@ func TestCancelExecutionStatusValidation(t *testing.T) {
 			ExecutionID: "exec-ce3",
 			MemberID:    "member-ce3",
 			Status:      types.ExecRunning,
+			TriggerType: types.TriggerHuman,
 		}
 		_ = execStore.Save(ctx.Context, record)
 
@@ -796,6 +807,7 @@ func TestCancelExecutionStatusValidation(t *testing.T) {
 			ExecutionID: "exec-ce4",
 			MemberID:    "member-ce4",
 			Status:      types.ExecCompleted,
+			TriggerType: types.TriggerHuman,
 		}
 		_ = execStore.Save(ctx.Context, record)
 
