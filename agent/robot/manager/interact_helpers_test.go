@@ -99,9 +99,11 @@ func TestAdjustExecution(t *testing.T) {
 			ExecutionID: "exec-hl2",
 			MemberID:    "member-hl2",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecPending,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		actionData := map[string]interface{}{"goals": "updated goals content"}
 		err := m.adjustExecution(ctx, record, actionData, execStore)
@@ -121,9 +123,11 @@ func TestAdjustExecution(t *testing.T) {
 			ExecutionID: "exec-hl3",
 			MemberID:    "member-hl3",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecPending,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		tasks := []map[string]interface{}{
 			{"id": "t1", "name": "Task 1"},
@@ -156,9 +160,11 @@ func TestAdjustExecution(t *testing.T) {
 			ExecutionID: "exec-hl4",
 			MemberID:    "member-hl4",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecPending,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		err := m.adjustExecution(ctx, record, "not a map", execStore)
 		require.NoError(t, err)
@@ -180,9 +186,11 @@ func TestInjectTask(t *testing.T) {
 			ExecutionID: "exec-hl5",
 			MemberID:    "member-hl5",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecPending,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		taskData := map[string]interface{}{"name": "New Task"}
 		err := m.injectTask(ctx, record, taskData, execStore)
@@ -203,12 +211,14 @@ func TestInjectTask(t *testing.T) {
 			ExecutionID: "exec-hl6",
 			MemberID:    "member-hl6",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecPending,
+			Phase:       types.PhaseInspiration,
 			Tasks: []types.Task{
 				{ID: "existing-1", Description: "Existing"},
 			},
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		taskData := map[string]interface{}{"name": "Added Task"}
 		err := m.injectTask(ctx, record, taskData, execStore)
@@ -238,9 +248,11 @@ func TestInjectTask(t *testing.T) {
 			ExecutionID: "exec-hl6b",
 			MemberID:    "member-hl6b",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecPending,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		taskData := map[string]interface{}{"id": "custom-id", "name": "Custom"}
 		err := m.injectTask(ctx, record, taskData, execStore)
@@ -346,9 +358,11 @@ func TestProcessHostActionAdjust(t *testing.T) {
 			ExecutionID: "exec-pa2",
 			MemberID:    "member-pa-adj",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecConfirming,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		output := &types.HostOutput{
 			Reply:      "Plan adjusted",
@@ -368,9 +382,11 @@ func TestProcessHostActionAdjust(t *testing.T) {
 			ExecutionID: "exec-pa3",
 			MemberID:    "member-pa-adj",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecConfirming,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		tasksJSON := []map[string]interface{}{{"id": "t1", "name": "Adjusted Task"}}
 		output := &types.HostOutput{
@@ -390,9 +406,11 @@ func TestProcessHostActionAdjust(t *testing.T) {
 			ExecutionID: "exec-pa4",
 			MemberID:    "member-pa-adj",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecConfirming,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		output := &types.HostOutput{
 			Reply:  "No changes",
@@ -421,9 +439,11 @@ func TestProcessHostActionAddTask(t *testing.T) {
 			ExecutionID: "exec-pa5",
 			MemberID:    "member-pa-at",
 			TriggerType: types.TriggerHuman,
+			Status:      types.ExecConfirming,
+			Phase:       types.PhaseInspiration,
 		}
 		execStore := store.NewExecutionStore()
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		output := &types.HostOutput{
 			Reply:      "Task added",
@@ -790,8 +810,9 @@ func TestCancelExecutionStatusValidation(t *testing.T) {
 			MemberID:    "member-ce3",
 			Status:      types.ExecRunning,
 			TriggerType: types.TriggerHuman,
+			Phase:       types.PhaseInspiration,
 		}
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		err := m.CancelExecution(ctx, "exec-ce3")
 		assert.Error(t, err)
@@ -808,8 +829,9 @@ func TestCancelExecutionStatusValidation(t *testing.T) {
 			MemberID:    "member-ce4",
 			Status:      types.ExecCompleted,
 			TriggerType: types.TriggerHuman,
+			Phase:       types.PhaseInspiration,
 		}
-		_ = execStore.Save(ctx.Context, record)
+		require.NoError(t, execStore.Save(ctx.Context, record))
 
 		err := m.CancelExecution(ctx, "exec-ce4")
 		assert.Error(t, err)
