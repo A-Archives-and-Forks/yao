@@ -17,6 +17,11 @@ import (
 // Output:
 //   - Goals with markdown content and delivery info
 func (e *Executor) RunGoals(ctx *robottypes.Context, exec *robottypes.Execution, _ interface{}) error {
+	// §18.2: confirming phase may have already populated Goals — skip regeneration
+	if exec.Goals != nil && exec.Goals.Content != "" {
+		return nil
+	}
+
 	// Get robot for identity and resources
 	robot := exec.GetRobot()
 	if robot == nil {

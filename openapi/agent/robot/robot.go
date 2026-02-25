@@ -41,4 +41,9 @@ func Attach(group *gin.RouterGroup, oauth types.OAuth) {
 	// Trigger & Intervene
 	group.POST("/:id/trigger", TriggerRobot)     // POST /robots/:id/trigger - Trigger robot execution
 	group.POST("/:id/intervene", InterveneRobot) // POST /robots/:id/intervene - Human intervention
+
+	// V2: Unified Interact API (suspend-resume, human-in-the-loop)
+	group.POST("/:id/interact", InteractRobot)                               // POST /robots/:id/interact - Unified interaction
+	group.POST("/:id/executions/:exec_id/tasks/:task_id/reply", ReplyToTask) // POST /robots/:id/executions/:exec_id/tasks/:task_id/reply - Reply to waiting task
+	group.POST("/:id/executions/:exec_id/confirm", ConfirmExecution)         // POST /robots/:id/executions/:exec_id/confirm - Confirm execution
 }

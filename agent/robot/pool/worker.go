@@ -90,11 +90,22 @@ func (w *Worker) execute(item *QueueItem) {
 			w.requeue(item, "quota exceeded (race)")
 			return
 		}
+
+		// Suspended execution: state is persisted, worker slot released gracefully.
+		// Do NOT call onComplete — the execution stays in robot.Executions and execController
+		// so that Resume can find it later (§16.1).
+		if err == types.ErrExecutionSuspended {
+			if execution != nil {
+				fmt.Printf("Worker %d: Execution %s suspended for robot %s (waiting for input)\n",
+					w.id, execution.ID, item.Robot.MemberID)
+			}
+			return
+		}
+
 		fmt.Printf("Worker %d: Execution failed for robot %s: %v\n",
 			w.id, item.Robot.MemberID, err)
 		// Notify completion callback with appropriate status
 		if w.pool.onComplete != nil {
-			// Determine status based on error type
 			status := types.ExecFailed
 			if err == types.ErrExecutionCancelled {
 				status = types.ExecCancelled

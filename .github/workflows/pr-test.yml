@@ -63,6 +63,12 @@ env:
   CLAUDE_SONNET_4: ${{ secrets.CLAUDE_SONNET_4 }}
   CLAUDE_SONNET_4_THINKING: ${{ secrets.CLAUDE_SONNET_4_THINKING }}
 
+  # Moonshot / Kimi API Configuration
+  MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+  MOONSHOT_PROXY: "https://api.moonshot.cn"
+  KIMI_CODE_API_KEY: ${{ secrets.KIMI_CODE_API_KEY }}
+  KIMI_CODE_PROXY: "https://api.kimi.com/coding"
+
   TAB_NAME: "::PET ADMIN"
   PAGE_SIZE: "20"
   PAGE_LINK: "https://yaoapps.com"
