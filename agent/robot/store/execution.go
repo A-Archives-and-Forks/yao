@@ -40,6 +40,13 @@ type ExecutionRecord struct {
 	Delivery    *types.DeliveryResult    `json:"delivery,omitempty"`
 	Learning    []types.LearningEntry    `json:"learning,omitempty"`
 
+	// V2: Conversation and suspend-resume fields
+	ChatID          string               `json:"chat_id,omitempty"`
+	WaitingTaskID   string               `json:"waiting_task_id,omitempty"`
+	WaitingQuestion string               `json:"waiting_question,omitempty"`
+	WaitingSince    *time.Time           `json:"waiting_since,omitempty"`
+	ResumeContext   *types.ResumeContext `json:"resume_context,omitempty"`
+
 	// Timestamps
 	StartTime *time.Time `json:"start_time,omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty"`
@@ -380,6 +387,68 @@ func (s *ExecutionStore) UpdateUIFields(ctx context.Context, executionID string,
 	return nil
 }
 
+// UpdateSuspendState atomically transitions an execution to waiting status
+// with all suspend-related fields in a single DB write.
+func (s *ExecutionStore) UpdateSuspendState(ctx context.Context, executionID string, waitingTaskID string, question string, resumeCtx *types.ResumeContext) error {
+	mod := model.Select(s.modelID)
+	if mod == nil {
+		return fmt.Errorf("model %s not found", s.modelID)
+	}
+
+	now := time.Now()
+	updateData := map[string]interface{}{
+		"status":           string(types.ExecWaiting),
+		"waiting_task_id":  waitingTaskID,
+		"waiting_question": question,
+		"waiting_since":    now,
+	}
+	if resumeCtx != nil {
+		updateData["resume_context"] = resumeCtx
+	}
+
+	_, err := mod.UpdateWhere(
+		model.QueryParam{
+			Wheres: []model.QueryWhere{
+				{Column: "execution_id", Value: executionID},
+			},
+		},
+		updateData,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update suspend state: %w", err)
+	}
+	return nil
+}
+
+// UpdateResumeState clears waiting fields and transitions execution back to running.
+func (s *ExecutionStore) UpdateResumeState(ctx context.Context, executionID string) error {
+	mod := model.Select(s.modelID)
+	if mod == nil {
+		return fmt.Errorf("model %s not found", s.modelID)
+	}
+
+	updateData := map[string]interface{}{
+		"status":           string(types.ExecRunning),
+		"waiting_task_id":  "",
+		"waiting_question": "",
+		"waiting_since":    nil,
+		"resume_context":   nil,
+	}
+
+	_, err := mod.UpdateWhere(
+		model.QueryParam{
+			Wheres: []model.QueryWhere{
+				{Column: "execution_id", Value: executionID},
+			},
+		},
+		updateData,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update resume state: %w", err)
+	}
+	return nil
+}
+
 // Delete removes an execution record by execution_id
 func (s *ExecutionStore) Delete(ctx context.Context, executionID string) error {
 	mod := model.Select(s.modelID)
@@ -443,6 +512,23 @@ func (s *ExecutionStore) recordToMap(record *ExecutionRecord) map[string]interfa
 	if record.Learning != nil {
 		data["learning"] = record.Learning
 	}
+	// V2 fields
+	if record.ChatID != "" {
+		data["chat_id"] = record.ChatID
+	}
+	if record.WaitingTaskID != "" {
+		data["waiting_task_id"] = record.WaitingTaskID
+	}
+	if record.WaitingQuestion != "" {
+		data["waiting_question"] = record.WaitingQuestion
+	}
+	if record.WaitingSince != nil {
+		data["waiting_since"] = *record.WaitingSince
+	}
+	if record.ResumeContext != nil {
+		data["resume_context"] = record.ResumeContext
+	}
+
 	if record.StartTime != nil {
 		data["start_time"] = *record.StartTime
 	}
@@ -520,6 +606,23 @@ func (s *ExecutionStore) mapToRecord(row map[string]interface{}) (*ExecutionReco
 	}
 	if v := row["learning"]; v != nil {
 		record.Learning = s.parseLearningEntries(v)
+	}
+
+	// V2 fields
+	if v, ok := row["chat_id"].(string); ok {
+		record.ChatID = v
+	}
+	if v, ok := row["waiting_task_id"].(string); ok {
+		record.WaitingTaskID = v
+	}
+	if v, ok := row["waiting_question"].(string); ok {
+		record.WaitingQuestion = v
+	}
+	if v := row["waiting_since"]; v != nil {
+		record.WaitingSince = s.parseTime(v)
+	}
+	if v := row["resume_context"]; v != nil {
+		record.ResumeContext = s.parseResumeContext(v)
 	}
 
 	// Timestamps
@@ -635,6 +738,18 @@ func (s *ExecutionStore) parseLearningEntries(v interface{}) []types.LearningEnt
 		return nil
 	}
 	return entries
+}
+
+func (s *ExecutionStore) parseResumeContext(v interface{}) *types.ResumeContext {
+	data, err := s.toJSON(v)
+	if err != nil {
+		return nil
+	}
+	var ctx types.ResumeContext
+	if err := json.Unmarshal(data, &ctx); err != nil {
+		return nil
+	}
+	return &ctx
 }
 
 func (s *ExecutionStore) toJSON(v interface{}) ([]byte, error) {
@@ -1077,6 +1192,11 @@ func FromExecution(exec *types.Execution) *ExecutionRecord {
 		Results:         exec.Results,
 		Delivery:        exec.Delivery,
 		Learning:        exec.Learning,
+		ChatID:          exec.ChatID,
+		WaitingTaskID:   exec.WaitingTaskID,
+		WaitingQuestion: exec.WaitingQuestion,
+		WaitingSince:    exec.WaitingSince,
+		ResumeContext:   exec.ResumeContext,
 	}
 
 	// Convert timestamps
@@ -1117,6 +1237,11 @@ func (r *ExecutionRecord) ToExecution() *types.Execution {
 		Results:         r.Results,
 		Delivery:        r.Delivery,
 		Learning:        r.Learning,
+		ChatID:          r.ChatID,
+		WaitingTaskID:   r.WaitingTaskID,
+		WaitingQuestion: r.WaitingQuestion,
+		WaitingSince:    r.WaitingSince,
+		ResumeContext:   r.ResumeContext,
 	}
 
 	// Convert timestamps

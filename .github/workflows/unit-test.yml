@@ -67,6 +67,12 @@ env:
   CLAUDE_SONNET_4: ${{ secrets.CLAUDE_SONNET_4 }}
   CLAUDE_SONNET_4_THINKING: ${{ secrets.CLAUDE_SONNET_4_THINKING }}
 
+  # Moonshot / Kimi API Configuration
+  MOONSHOT_API_KEY: ${{ secrets.MOONSHOT_API_KEY }}
+  MOONSHOT_PROXY: "https://api.moonshot.cn"
+  KIMI_CODE_API_KEY: ${{ secrets.KIMI_CODE_API_KEY }}
+  KIMI_CODE_PROXY: "https://api.kimi.com/coding"
+
   TAB_NAME: "::PET ADMIN"
   PAGE_SIZE: "20"
   PAGE_LINK: "https://yaoapps.com"
@@ -297,9 +303,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # =============================================================================
-  # AI Tests (agent, aigc) - Run once with SQLite
+  # Agent Tests (agent, aigc) - Run once with SQLite
   # =============================================================================
-  ai-test:
+  agent-test:
     runs-on: ubuntu-latest
     services:
       qdrant:
@@ -438,13 +444,13 @@ jobs:
           docker pull yaoapp/sandbox-base:latest || true
           docker pull yaoapp/sandbox-claude:latest || true
 
-      - name: Run AI Tests (agent, aigc)
+      - name: Run Agent Tests (agent, aigc)
         env:
           YAO_SANDBOX_WORKSPACE: ${{ runner.temp }}/sandbox/workspace
           YAO_SANDBOX_IPC: ${{ runner.temp }}/sandbox/ipc
         run: |
           export YAO_SANDBOX_CONTAINER_USER="$(id -u):$(id -g)"
-          make unit-test-ai
+          make unit-test-agent
 
       - name: Codecov Report
         uses: codecov/codecov-action@v4
@@ -452,9 +458,9 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # =============================================================================
-  # Robot E2E Tests (agent/robot/api) - Run TestE2E* with real LLM calls
+  # Robot Tests (all agent/robot/... packages) - Unit + E2E with real LLM calls
   # =============================================================================
-  robot-e2e-test:
+  robot-test:
     runs-on: ubuntu-latest
     services:
       mcp-everything:
@@ -551,8 +557,8 @@ jobs:
           echo "YAO_DB_DRIVER=sqlite3" >> $GITHUB_ENV
           echo "YAO_DB_PRIMARY=${{ github.WORKSPACE }}/../app/db/yao.db" >> $GITHUB_ENV
 
-      - name: Run Robot E2E Tests
-        run: make unit-test-robot-e2e
+      - name: Run Robot Tests (Unit + E2E)
+        run: make unit-test-robot
 
       - name: Codecov Report
         uses: codecov/codecov-action@v4

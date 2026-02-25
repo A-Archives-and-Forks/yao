@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/yaoapp/gou/model"
+	robotevents "github.com/yaoapp/yao/agent/robot/events"
 	robottypes "github.com/yaoapp/yao/agent/robot/types"
+	"github.com/yaoapp/yao/event"
 )
 
 // RunDelivery executes P4: Delivery phase
@@ -73,7 +75,7 @@ func (e *Executor) RunDelivery(ctx *robottypes.Context, exec *robottypes.Executi
 			},
 			Success: true,
 		}
-		return e.routeToDeliveryCenter(ctx, exec, robot)
+		return e.pushDeliveryEvent(ctx, exec, robot)
 	}
 
 	// Build DeliveryContent from JSON
@@ -89,8 +91,23 @@ func (e *Executor) RunDelivery(ctx *robottypes.Context, exec *robottypes.Executi
 		Success:   true,
 	}
 
-	// Route to Delivery Center for actual delivery
-	return e.routeToDeliveryCenter(ctx, exec, robot)
+	// Push delivery event for asynchronous routing via handlers
+	return e.pushDeliveryEvent(ctx, exec, robot)
+}
+
+// pushDeliveryEvent pushes a delivery event to the event bus.
+// Registered handlers (see events/handlers.go) route to email/webhook/process channels.
+func (e *Executor) pushDeliveryEvent(ctx *robottypes.Context, exec *robottypes.Execution, robot *robottypes.Robot) error {
+	prefs := buildDeliveryPreferences(robot)
+	event.Push(ctx.Context, robotevents.Delivery, robotevents.DeliveryPayload{
+		ExecutionID: exec.ID,
+		MemberID:    exec.MemberID,
+		TeamID:      exec.TeamID,
+		ChatID:      exec.ChatID,
+		Content:     exec.Delivery.Content,
+		Preferences: prefs,
+	})
+	return nil
 }
 
 // routeToDeliveryCenter sends content to the Delivery Center for actual delivery

@@ -17,6 +17,11 @@ import (
 // Output:
 //   - List of Task objects with executor assignments, expected outputs, and validation rules
 func (e *Executor) RunTasks(ctx *robottypes.Context, exec *robottypes.Execution, _ interface{}) error {
+	// §18.2: confirming phase may have already populated Tasks — skip regeneration
+	if len(exec.Tasks) > 0 {
+		return nil
+	}
+
 	// Get robot for resources
 	robot := exec.GetRobot()
 	if robot == nil {
