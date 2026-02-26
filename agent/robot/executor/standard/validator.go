@@ -431,6 +431,7 @@ func (v *Validator) validateSemantic(task *robottypes.Task, output interface{}) 
 
 	// Call validation agent
 	caller := NewAgentCaller()
+	caller.Connector = v.robot.LanguageModel
 	result, err := caller.CallWithMessages(v.ctx, validationAgentID, validationPrompt)
 	if err != nil {
 		return &robottypes.ValidationResult{
@@ -637,6 +638,7 @@ func (av *robotAgentValidator) Validate(agentID string, output, input, criteria 
 
 	// Call agent
 	caller := NewAgentCaller()
+	caller.Connector = av.v.robot.LanguageModel
 	callResult, err := caller.CallWithMessages(av.v.ctx, agentID, string(inputJSON))
 	if err != nil {
 		result.Passed = false

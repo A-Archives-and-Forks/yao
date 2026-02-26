@@ -21,7 +21,8 @@ type Robot struct {
 	SystemPrompt   string      `json:"system_prompt"`
 	Status         RobotStatus `json:"robot_status"`
 	AutonomousMode bool        `json:"autonomous_mode"`
-	RobotEmail     string      `json:"robot_email"` // Robot's email address for sending emails
+	RobotEmail     string      `json:"robot_email"`    // Robot's email address for sending emails
+	LanguageModel  string      `json:"language_model"` // LLM connector override (from __yao.member.language_model)
 
 	// Manager info (from __yao.member)
 	ManagerID    string `json:"manager_id"`    // Direct manager user_id (who manages this robot)
@@ -499,6 +500,7 @@ func NewRobotFromMap(m map[string]interface{}) (*Robot, error) {
 		RobotEmail:     getString(m, "robot_email"),
 		ManagerID:      getString(m, "manager_id"),
 		ManagerEmail:   getString(m, "manager_email"),
+		LanguageModel:  getString(m, "language_model"),
 	}
 
 	// Parse robot_status

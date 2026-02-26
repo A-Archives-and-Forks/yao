@@ -28,7 +28,7 @@ func TestRunnerExecuteTask(t *testing.T) {
 	t.Run("executes assistant task successfully", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		task := &types.Task{
 			ID:           "task-001",
@@ -58,7 +58,7 @@ func TestRunnerExecuteTask(t *testing.T) {
 	t.Run("returns success without validation for assistant tasks", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		task := &types.Task{
 			ID:           "task-002",
@@ -88,7 +88,7 @@ func TestRunnerExecuteTask(t *testing.T) {
 	t.Run("handles empty messages gracefully", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		task := &types.Task{
 			ID:           "task-003",
@@ -123,7 +123,7 @@ func TestRunnerBuildTaskContext(t *testing.T) {
 	t.Run("includes previous results in context", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		exec := &types.Execution{
 			ID:       "test-exec",
@@ -160,7 +160,7 @@ func TestRunnerBuildTaskContext(t *testing.T) {
 	t.Run("handles first task with no previous results", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		exec := &types.Execution{
 			ID:       "test-exec",
@@ -182,7 +182,7 @@ func TestRunnerBuildTaskContext(t *testing.T) {
 	t.Run("handles bounds check for task index", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		exec := &types.Execution{
 			ID:       "test-exec",
@@ -215,7 +215,7 @@ func TestRunnerFormatPreviousResultsAsContext(t *testing.T) {
 	t.Run("formats previous results as markdown", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		results := []types.TaskResult{
 			{
@@ -247,7 +247,7 @@ func TestRunnerFormatPreviousResultsAsContext(t *testing.T) {
 	t.Run("returns empty string for no results", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		formatted := runner.FormatPreviousResultsAsContext([]types.TaskResult{})
 
@@ -268,7 +268,7 @@ func TestRunnerBuildAssistantMessages(t *testing.T) {
 	t.Run("builds messages with task content", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		task := &types.Task{
 			ID:           "task-001",
@@ -300,7 +300,7 @@ func TestRunnerBuildAssistantMessages(t *testing.T) {
 	t.Run("includes previous results in messages", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		task := &types.Task{
 			ID:           "task-002",
@@ -340,7 +340,7 @@ func TestRunnerFormatMessagesAsText(t *testing.T) {
 	t.Run("formats string content", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		messages := []agentcontext.Message{
 			{Role: agentcontext.RoleUser, Content: "Hello"},
@@ -356,7 +356,7 @@ func TestRunnerFormatMessagesAsText(t *testing.T) {
 	t.Run("handles multipart content", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		messages := []agentcontext.Message{
 			{
@@ -377,7 +377,7 @@ func TestRunnerFormatMessagesAsText(t *testing.T) {
 	t.Run("handles map content via JSON", func(t *testing.T) {
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		messages := []agentcontext.Message{
 			{
@@ -409,7 +409,7 @@ func TestRunnerExecuteNonAssistantTask(t *testing.T) {
 		ctx := types.NewContext(context.Background(), testAuth())
 		robot := createRunnerTestRobot(t)
 		config := standard.DefaultRunConfig()
-		runner := standard.NewRunner(ctx, robot, config, "")
+		runner := standard.NewRunner(ctx, robot, config, "", "test")
 
 		task := &types.Task{
 			ID:           "task-unknown",

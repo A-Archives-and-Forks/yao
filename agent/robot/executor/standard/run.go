@@ -66,7 +66,7 @@ func (e *Executor) RunExecution(ctx *robottypes.Context, exec *robottypes.Execut
 	}
 
 	// Create task runner with execution-level chatID (§8.4)
-	runner := NewRunner(ctx, robot, config, exec.ChatID)
+	runner := NewRunner(ctx, robot, config, exec.ChatID, exec.ID)
 
 	// Execute tasks sequentially from startIndex
 	for i := startIndex; i < len(exec.Tasks); i++ {

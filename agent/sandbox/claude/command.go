@@ -153,11 +153,13 @@ func BuildCommandWithContinuation(messages []agentContext.Message, opts *Options
 	}
 
 	// Build claude command with all arguments
+	// Append 2>&1 to the claude command so stderr is merged into stdout;
+	// Docker's stdcopy discards the stderr stream, making errors invisible.
 	bashCmd.WriteString("cat << 'INPUTEOF' | claude -p")
 	for _, arg := range claudeArgs {
-		// Quote arguments that might contain special characters
 		bashCmd.WriteString(fmt.Sprintf(" %q", arg))
 	}
+	bashCmd.WriteString(" 2>&1")
 	bashCmd.WriteString("\n")
 	bashCmd.WriteString(string(inputJSONL))
 	bashCmd.WriteString("\nINPUTEOF")

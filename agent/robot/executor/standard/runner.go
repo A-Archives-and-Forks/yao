@@ -18,15 +18,17 @@ type Runner struct {
 	robot  *robottypes.Robot
 	config *RunConfig
 	chatID string // execution-level chatID for conversation persistence (§8.4)
+	log    *execLogger
 }
 
 // NewRunner creates a new task runner
-func NewRunner(ctx *robottypes.Context, robot *robottypes.Robot, config *RunConfig, chatID string) *Runner {
+func NewRunner(ctx *robottypes.Context, robot *robottypes.Robot, config *RunConfig, chatID string, execID string) *Runner {
 	return &Runner{
 		ctx:    ctx,
 		robot:  robot,
 		config: config,
 		chatID: chatID,
+		log:    newExecLogger(robot, execID),
 	}
 }
 
@@ -78,12 +80,14 @@ func (r *Runner) ExecuteTask(task *robottypes.Task, taskCtx *RunnerContext) *rob
 			result.Success = false
 			result.Error = fmt.Sprintf("execution failed: %s", err.Error())
 			result.Duration = time.Since(startTime).Milliseconds()
+			r.log.logTaskOutput(task, result)
 			return result
 		}
 
 		result.Output = output
 		result.Success = true
 		result.Duration = time.Since(startTime).Milliseconds()
+		r.log.logTaskOutput(task, result)
 		return result
 	}
 
@@ -93,6 +97,7 @@ func (r *Runner) ExecuteTask(task *robottypes.Task, taskCtx *RunnerContext) *rob
 		result.Success = false
 		result.Error = err.Error()
 		result.Duration = time.Since(startTime).Milliseconds()
+		r.log.logTaskOutput(task, result)
 		return result
 	}
 
@@ -106,6 +111,7 @@ func (r *Runner) ExecuteTask(task *robottypes.Task, taskCtx *RunnerContext) *rob
 		result.InputQuestion = question
 	}
 
+	r.log.logTaskOutput(task, result)
 	return result
 }
 
@@ -124,15 +130,10 @@ func (r *Runner) executeNonAssistantTask(task *robottypes.Task, taskCtx *RunnerC
 // executeAssistantTask executes an assistant task with a single conversation turn.
 // Returns the extracted output, the raw CallResult (for need_input detection), and any error.
 func (r *Runner) executeAssistantTask(task *robottypes.Task, taskCtx *RunnerContext) (interface{}, *CallResult, error) {
-	chatID := r.chatID
-	if chatID == "" {
-		chatID = fmt.Sprintf("robot-%s-task-%s", r.robot.MemberID, task.ID)
-	}
-	conv := NewConversation(task.ExecutorID, chatID, 1)
-
-	if taskCtx.SystemPrompt != "" {
-		conv.WithSystemPrompt(taskCtx.SystemPrompt)
-	}
+	caller := NewAgentCaller()
+	caller.log = r.log
+	caller.Connector = r.robot.LanguageModel
+	caller.ChatID = r.chatID
 
 	messages := r.BuildAssistantMessages(task, taskCtx)
 	input := r.FormatMessagesAsText(messages)
@@ -141,13 +142,19 @@ func (r *Runner) executeAssistantTask(task *robottypes.Task, taskCtx *RunnerCont
 		return nil, nil, fmt.Errorf("no valid input messages for task %s", task.ID)
 	}
 
-	turnResult, err := conv.Turn(r.ctx, input)
+	if taskCtx.SystemPrompt != "" {
+		input = "## Context\n\n" + taskCtx.SystemPrompt + "\n\n## Task\n\n" + input
+	}
+
+	r.log.logTaskInput(task, input)
+
+	result, err := caller.CallWithMessages(r.ctx, task.ExecutorID, input)
 	if err != nil {
 		return nil, nil, fmt.Errorf("assistant call failed: %w", err)
 	}
 
-	output := r.extractOutput(turnResult.Result)
-	return output, turnResult.Result, nil
+	output := r.extractOutput(result)
+	return output, result, nil
 }
 
 // detectNeedMoreInfo checks if the assistant's response signals it needs human input.
@@ -179,18 +186,20 @@ func detectNeedMoreInfo(result *CallResult) (bool, string) {
 }
 
 // extractOutput extracts the output from a CallResult
+// Priority: Next hook data > LLM Completion content
+// Next is the agent's formal A2A output (could be string, map, array, number, etc.)
+// Content is the raw LLM completion text (fallback only when Next is absent)
 func (r *Runner) extractOutput(result *CallResult) interface{} {
 	if result == nil {
 		return nil
 	}
-
-	// Try to extract structured JSON output
-	if data, err := result.GetJSON(); err == nil {
-		return data
+	if result.Next != nil {
+		return result.Next
 	}
-
-	// Fall back to text content
-	return result.GetText()
+	if result.Content != "" {
+		return result.Content
+	}
+	return nil
 }
 
 // ExecuteMCPTask executes a task using an MCP tool

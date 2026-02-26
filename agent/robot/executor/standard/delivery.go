@@ -53,6 +53,7 @@ func (e *Executor) RunDelivery(ctx *robottypes.Context, exec *robottypes.Executi
 
 	// Call Delivery Agent
 	caller := NewAgentCaller()
+	caller.Connector = robot.LanguageModel
 	result, err := caller.CallWithMessages(ctx, agentID, userContent)
 	if err != nil {
 		return fmt.Errorf("delivery agent (%s) call failed: %w", agentID, err)

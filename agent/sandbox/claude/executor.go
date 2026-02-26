@@ -188,7 +188,8 @@ func (e *Executor) Stream(ctx *agentContext.Context, messages []agentContext.Mes
 
 	// Check if we should skip Claude CLI execution
 	// Skip if no prompts, no skills, and no MCP config
-	if e.shouldSkipClaudeCLI() {
+	skipCLI := e.shouldSkipClaudeCLI()
+	if skipCLI {
 		// Return empty response - hooks can use sandbox API to do their work
 		return &agentContext.CompletionResponse{
 			ID:           fmt.Sprintf("sandbox-skip-%d", time.Now().UnixNano()),
@@ -1115,8 +1116,9 @@ func (e *Executor) parseStream(ctx *agentContext.Context, reader io.Reader, hand
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading stream: %w", err)
+	scanErr := scanner.Err()
+	if scanErr != nil {
+		return nil, fmt.Errorf("error reading stream: %w", scanErr)
 	}
 
 	// Close the last tool loading message if exists

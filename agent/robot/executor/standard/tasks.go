@@ -53,6 +53,8 @@ func (e *Executor) RunTasks(ctx *robottypes.Context, exec *robottypes.Execution,
 
 	// Call agent
 	caller := NewAgentCaller()
+	caller.log = newExecLogger(robot, exec.ID)
+	caller.Connector = robot.LanguageModel
 	result, err := caller.CallWithMessages(ctx, agentID, userContent)
 	if err != nil {
 		return fmt.Errorf("tasks agent (%s) call failed: %w", agentID, err)
@@ -83,6 +85,11 @@ func (e *Executor) RunTasks(ctx *robottypes.Context, exec *robottypes.Execution,
 	}
 
 	exec.Tasks = tasks
+
+	// Log task overview for developer observability
+	el := newExecLogger(robot, exec.ID)
+	el.logTaskOverview(tasks)
+
 	return nil
 }
 
