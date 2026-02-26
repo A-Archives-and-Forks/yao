@@ -30,6 +30,13 @@ type AgentCaller struct {
 	// ChatID is used for multi-turn conversations to maintain session state
 	// If empty, each call is independent (no history)
 	ChatID string
+
+	// Connector overrides the assistant's default LLM connector (from Robot.LanguageModel).
+	// When non-empty, passed as opts.Connector to ast.Stream so the agent uses the Robot's model.
+	Connector string
+
+	// log is an optional structured logger; when set, Call emits agent-call logs.
+	log *execLogger
 }
 
 // NewAgentCaller creates a new AgentCaller with default settings (single-call mode)
@@ -78,16 +85,13 @@ func (r *CallResult) GetText() string {
 	if r.Content != "" {
 		return r.Content
 	}
-	// If Next is a string, return it
 	if s, ok := r.Next.(string); ok {
 		return s
 	}
-	// If Next has a "content" field, return it
 	if m, ok := r.Next.(map[string]interface{}); ok {
 		if content, ok := m["content"].(string); ok {
 			return content
 		}
-		// Also check "data" field (common pattern in Next hook)
 		if data, ok := m["data"].(map[string]interface{}); ok {
 			if content, ok := data["content"].(string); ok {
 				return content
@@ -103,10 +107,8 @@ func (r *CallResult) GetText() string {
 // 2. Content parsed using gou/text.ExtractJSON (fault-tolerant)
 // Returns the parsed data and any error
 func (r *CallResult) GetJSON() (map[string]interface{}, error) {
-	// Try Next hook data first
 	if r.Next != nil {
 		if m, ok := r.Next.(map[string]interface{}); ok {
-			// Check for "data" wrapper (common in Next hook)
 			if data, ok := m["data"].(map[string]interface{}); ok {
 				return data, nil
 			}
@@ -114,7 +116,6 @@ func (r *CallResult) GetJSON() (map[string]interface{}, error) {
 		}
 	}
 
-	// Try parsing Content using gou/text (handles markdown blocks, JSON, YAML)
 	if r.Content != "" {
 		data := text.ExtractJSON(r.Content)
 		if data != nil {
@@ -174,6 +175,7 @@ func (c *AgentCaller) Call(ctx *robottypes.Context, assistantID string, messages
 			History: c.SkipHistory,
 			Search:  c.SkipSearch,
 		},
+		Connector: c.Connector,
 	}
 
 	// Convert robot context to agent context
@@ -201,6 +203,10 @@ func (c *AgentCaller) Call(ctx *robottypes.Context, assistantID string, messages
 		if content, ok := response.Completion.Content.(string); ok {
 			result.Content = content
 		}
+	}
+
+	if c.log != nil {
+		c.log.logAgentCall(assistantID, result)
 	}
 
 	return result, nil

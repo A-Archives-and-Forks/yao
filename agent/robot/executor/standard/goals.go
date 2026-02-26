@@ -84,6 +84,7 @@ func (e *Executor) RunGoals(ctx *robottypes.Context, exec *robottypes.Execution,
 
 	// Call agent
 	caller := NewAgentCaller()
+	caller.Connector = robot.LanguageModel
 	result, err := caller.CallWithMessages(ctx, agentID, userContent)
 	if err != nil {
 		return fmt.Errorf("goals agent (%s) call failed: %w", agentID, err)
