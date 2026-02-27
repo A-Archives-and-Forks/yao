@@ -1,5 +1,7 @@
 package events
 
+import robottypes "github.com/yaoapp/yao/agent/robot/types"
+
 // Robot event type constants for event.Push integration.
 // Events are fire-and-forget; handlers are registered via event.Register().
 const (
@@ -46,11 +48,10 @@ type TaskPayload struct {
 
 // DeliveryPayload is the event payload for Delivery events.
 type DeliveryPayload struct {
-	ExecutionID string      `json:"execution_id"`
-	MemberID    string      `json:"member_id"`
-	TeamID      string      `json:"team_id"`
-	ChatID      string      `json:"chat_id,omitempty"`
-	Result      interface{} `json:"result,omitempty"`
-	Content     interface{} `json:"content,omitempty"`     // DeliveryContent from agent
-	Preferences interface{} `json:"preferences,omitempty"` // DeliveryPreferences for routing
+	ExecutionID string                          `json:"execution_id"`
+	MemberID    string                          `json:"member_id"`
+	TeamID      string                          `json:"team_id"`
+	ChatID      string                          `json:"chat_id,omitempty"`
+	Content     *robottypes.DeliveryContent     `json:"content,omitempty"`
+	Preferences *robottypes.DeliveryPreferences `json:"preferences,omitempty"`
 }

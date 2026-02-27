@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	robottypes "github.com/yaoapp/yao/agent/robot/types"
 )
 
 func TestEventConstants(t *testing.T) {
@@ -121,8 +122,16 @@ func TestDeliveryPayloadMarshalling(t *testing.T) {
 		MemberID:    "member-d1",
 		TeamID:      "team-d1",
 		ChatID:      "chat-d1",
-		Content:     map[string]interface{}{"summary": "done"},
-		Preferences: map[string]interface{}{"channel": "email"},
+		Content: &robottypes.DeliveryContent{
+			Summary: "done",
+			Body:    "full report",
+		},
+		Preferences: &robottypes.DeliveryPreferences{
+			Email: &robottypes.EmailPreference{
+				Enabled: true,
+				Targets: []robottypes.EmailTarget{{To: []string{"a@b.com"}}},
+			},
+		},
 	}
 
 	data, err := json.Marshal(payload)
@@ -134,13 +143,7 @@ func TestDeliveryPayloadMarshalling(t *testing.T) {
 	assert.Equal(t, "exec-d1", parsed.ExecutionID)
 	assert.Equal(t, "member-d1", parsed.MemberID)
 	assert.NotNil(t, parsed.Content)
+	assert.Equal(t, "done", parsed.Content.Summary)
 	assert.NotNil(t, parsed.Preferences)
-
-	contentMap, ok := parsed.Content.(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "done", contentMap["summary"])
-
-	prefMap, ok := parsed.Preferences.(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "email", prefMap["channel"])
+	assert.NotNil(t, parsed.Preferences.Email)
 }
