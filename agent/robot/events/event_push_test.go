@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	robottypes "github.com/yaoapp/yao/agent/robot/types"
 )
 
 // EP1: ExecPayload with all execution statuses
@@ -76,18 +77,14 @@ func TestTaskPayloadErrorSerialization(t *testing.T) {
 
 // EP4: DeliveryPayload with nested content
 func TestDeliveryPayloadNestedContent(t *testing.T) {
-	content := map[string]interface{}{
-		"report": map[string]interface{}{
-			"title":    "Daily Summary",
-			"sections": []interface{}{"intro", "body", "conclusion"},
-		},
-	}
-
 	payload := DeliveryPayload{
 		ExecutionID: "exec-ep4",
 		MemberID:    "member-ep4",
 		TeamID:      "team-ep4",
-		Content:     content,
+		Content: &robottypes.DeliveryContent{
+			Summary: "Daily Summary",
+			Body:    "Full body with sections: intro, body, conclusion",
+		},
 	}
 
 	data, err := json.Marshal(payload)
@@ -97,11 +94,9 @@ func TestDeliveryPayloadNestedContent(t *testing.T) {
 	err = json.Unmarshal(data, &parsed)
 	require.NoError(t, err)
 
-	contentMap, ok := parsed.Content.(map[string]interface{})
-	require.True(t, ok)
-	report, ok := contentMap["report"].(map[string]interface{})
-	require.True(t, ok)
-	assert.Equal(t, "Daily Summary", report["title"])
+	require.NotNil(t, parsed.Content)
+	assert.Equal(t, "Daily Summary", parsed.Content.Summary)
+	assert.Contains(t, parsed.Content.Body, "sections")
 }
 
 // EP5: Event constants follow naming convention

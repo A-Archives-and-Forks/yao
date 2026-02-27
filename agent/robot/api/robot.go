@@ -113,15 +113,15 @@ func GetRobotStatus(ctx *types.Context, memberID string) (*RobotState, error) {
 
 	// Get running execution IDs from ExecutionStore (more reliable than in-memory)
 	// This ensures we get accurate status even when robot is loaded from database
-	runningExecs, err := executionStore.List(context.Background(), &store.ListOptions{
+	runningResult, err := executionStore.List(context.Background(), &store.ListOptions{
 		MemberID: memberID,
 		Status:   types.ExecRunning,
-		Limit:    100,
+		PageSize: 100,
 	})
-	if err == nil && len(runningExecs) > 0 {
-		state.Running = len(runningExecs)
-		state.RunningIDs = make([]string, 0, len(runningExecs))
-		for _, exec := range runningExecs {
+	if err == nil && runningResult != nil && len(runningResult.Data) > 0 {
+		state.Running = len(runningResult.Data)
+		state.RunningIDs = make([]string, 0, len(runningResult.Data))
+		for _, exec := range runningResult.Data {
 			state.RunningIDs = append(state.RunningIDs, exec.ExecutionID)
 		}
 		// Update status based on running count

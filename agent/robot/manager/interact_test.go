@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/yaoapp/yao/agent/robot/executor/standard"
 	"github.com/yaoapp/yao/agent/robot/store"
 	"github.com/yaoapp/yao/agent/robot/types"
 )
@@ -184,5 +185,65 @@ func TestCancelExecutionValidation(t *testing.T) {
 		err := m.CancelExecution(types.NewContext(nil, nil), "exec-1")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "manager not started")
+	})
+}
+
+func TestParseHostAgentResult(t *testing.T) {
+	m := &Manager{}
+
+	t.Run("plain text returns WaitForMore", func(t *testing.T) {
+		result := &standard.CallResult{Content: "I understand your request. Shall I proceed?"}
+		output, err := m.parseHostAgentResult(result)
+		require.NoError(t, err)
+		assert.True(t, output.WaitForMore, "plain text should set WaitForMore=true")
+		assert.Equal(t, "I understand your request. Shall I proceed?", output.Reply)
+		assert.Empty(t, string(output.Action), "plain text should have no action")
+	})
+
+	t.Run("JSON with action returns action", func(t *testing.T) {
+		result := &standard.CallResult{
+			Content: `{"reply":"Task confirmed","action":"confirm","wait_for_more":false}`,
+		}
+		output, err := m.parseHostAgentResult(result)
+		require.NoError(t, err)
+		assert.False(t, output.WaitForMore)
+		assert.Equal(t, types.HostActionConfirm, output.Action)
+		assert.Equal(t, "Task confirmed", output.Reply)
+	})
+
+	t.Run("JSON without action returns WaitForMore", func(t *testing.T) {
+		result := &standard.CallResult{
+			Content: `{"reply":"Let me think about this","some_field":"value"}`,
+		}
+		output, err := m.parseHostAgentResult(result)
+		require.NoError(t, err)
+		assert.True(t, output.WaitForMore, "JSON without action should set WaitForMore=true")
+		assert.NotEmpty(t, output.Reply)
+	})
+
+	t.Run("JSON with adjust action and action_data", func(t *testing.T) {
+		result := &standard.CallResult{
+			Content: `{"reply":"Plan adjusted","action":"adjust","action_data":{"goals":"new goals"}}`,
+		}
+		output, err := m.parseHostAgentResult(result)
+		require.NoError(t, err)
+		assert.False(t, output.WaitForMore)
+		assert.Equal(t, types.HostActionAdjust, output.Action)
+		assert.NotNil(t, output.ActionData)
+	})
+
+	t.Run("malformed JSON returns WaitForMore", func(t *testing.T) {
+		result := &standard.CallResult{Content: `{invalid json`}
+		output, err := m.parseHostAgentResult(result)
+		require.NoError(t, err)
+		assert.True(t, output.WaitForMore)
+		assert.Equal(t, `{invalid json`, output.Reply)
+	})
+
+	t.Run("empty content returns WaitForMore", func(t *testing.T) {
+		result := &standard.CallResult{Content: ""}
+		output, err := m.parseHostAgentResult(result)
+		require.NoError(t, err)
+		assert.True(t, output.WaitForMore)
 	})
 }

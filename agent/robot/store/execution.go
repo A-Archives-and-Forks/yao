@@ -62,13 +62,22 @@ type CurrentState struct {
 
 // ListOptions - options for listing execution records
 type ListOptions struct {
-	MemberID    string            `json:"member_id,omitempty"` // Filter by robot member ID
-	TeamID      string            `json:"team_id,omitempty"`
-	Status      types.ExecStatus  `json:"status,omitempty"`
-	TriggerType types.TriggerType `json:"trigger_type,omitempty"`
-	Limit       int               `json:"limit,omitempty"`
-	Offset      int               `json:"offset,omitempty"`
-	OrderBy     string            `json:"order_by,omitempty"` // e.g., "start_time desc"
+	MemberID        string             `json:"member_id,omitempty"`
+	TeamID          string             `json:"team_id,omitempty"`
+	Status          types.ExecStatus   `json:"status,omitempty"`
+	ExcludeStatuses []types.ExecStatus `json:"exclude_statuses,omitempty"`
+	TriggerType     types.TriggerType  `json:"trigger_type,omitempty"`
+	Page            int                `json:"page,omitempty"`
+	PageSize        int                `json:"pagesize,omitempty"`
+	OrderBy         string             `json:"order_by,omitempty"`
+}
+
+// ListResult wraps paginated list results
+type ListResult struct {
+	Data     []*ExecutionRecord
+	Total    int
+	Page     int
+	PageSize int
 }
 
 // ExecutionStore - persistent storage for robot execution records
@@ -142,17 +151,19 @@ func (s *ExecutionStore) Get(ctx context.Context, executionID string) (*Executio
 	return s.mapToRecord(rows[0])
 }
 
-// List retrieves execution records with filters
-func (s *ExecutionStore) List(ctx context.Context, opts *ListOptions) ([]*ExecutionRecord, error) {
+// List retrieves execution records with pagination using mod.Paginate
+func (s *ExecutionStore) List(ctx context.Context, opts *ListOptions) (*ListResult, error) {
 	mod := model.Select(s.modelID)
 	if mod == nil {
 		return nil, fmt.Errorf("model %s not found", s.modelID)
 	}
 
 	params := model.QueryParam{}
-
-	// Build where conditions
 	var wheres []model.QueryWhere
+
+	page := 1
+	pageSize := 20
+
 	if opts != nil {
 		if opts.MemberID != "" {
 			wheres = append(wheres, model.QueryWhere{Column: "member_id", Value: opts.MemberID})
@@ -163,49 +174,62 @@ func (s *ExecutionStore) List(ctx context.Context, opts *ListOptions) ([]*Execut
 		if opts.Status != "" {
 			wheres = append(wheres, model.QueryWhere{Column: "status", Value: string(opts.Status)})
 		}
+		for _, es := range opts.ExcludeStatuses {
+			wheres = append(wheres, model.QueryWhere{Column: "status", Value: string(es), OP: "ne"})
+		}
 		if opts.TriggerType != "" {
 			wheres = append(wheres, model.QueryWhere{Column: "trigger_type", Value: string(opts.TriggerType)})
 		}
 
-		params.Limit = opts.Limit
-		if params.Limit == 0 {
-			params.Limit = 100 // default limit
+		if opts.Page > 0 {
+			page = opts.Page
 		}
-
-		// Note: model.QueryParam doesn't have Offset, use Page instead
-		if opts.Offset > 0 && opts.Limit > 0 {
-			params.Page = (opts.Offset / opts.Limit) + 1
+		if opts.PageSize > 0 {
+			pageSize = opts.PageSize
+			if pageSize > 100 {
+				pageSize = 100
+			}
 		}
 
 		if opts.OrderBy != "" {
-			// Parse OrderBy: "column desc" or "column asc" or just "column"
 			parts := splitOrderBy(opts.OrderBy)
 			params.Orders = []model.QueryOrder{{Column: parts[0], Option: parts[1]}}
 		} else {
 			params.Orders = []model.QueryOrder{{Column: "start_time", Option: "desc"}}
 		}
 	} else {
-		params.Limit = 100
 		params.Orders = []model.QueryOrder{{Column: "start_time", Option: "desc"}}
 	}
 
 	params.Wheres = wheres
 
-	rows, err := mod.Get(params)
+	res, err := mod.Paginate(params, page, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list execution records: %w", err)
 	}
 
-	records := make([]*ExecutionRecord, 0, len(rows))
-	for _, row := range rows {
+	total := 0
+	if v, ok := res["total"].(int64); ok {
+		total = int(v)
+	} else if v, ok := res["total"].(int); ok {
+		total = v
+	}
+
+	records := make([]*ExecutionRecord, 0)
+	for _, row := range toRows(res["data"]) {
 		record, err := s.mapToRecord(row)
 		if err != nil {
-			continue // skip invalid records
+			continue
 		}
 		records = append(records, record)
 	}
 
-	return records, nil
+	return &ListResult{
+		Data:     records,
+		Total:    total,
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
 }
 
 // UpdatePhase updates the current phase and its data
@@ -767,6 +791,23 @@ func (s *ExecutionStore) toJSON(v interface{}) ([]byte, error) {
 
 // splitOrderBy parses "column desc" or "column asc" or just "column"
 // Returns [column, option] where option defaults to "desc"
+// toRows converts Paginate result data to []map[string]interface{}
+// handles type aliases like maps.MapStrAny via JSON round-trip
+func toRows(data interface{}) []map[string]interface{} {
+	if data == nil {
+		return nil
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil
+	}
+	return rows
+}
+
 func splitOrderBy(orderBy string) [2]string {
 	parts := [2]string{"", "desc"}
 	if orderBy == "" {
@@ -819,12 +860,12 @@ func (s *ExecutionStore) parseTime(v interface{}) *time.Time {
 
 // ResultListOptions - options for listing execution results (deliveries)
 type ResultListOptions struct {
-	MemberID    string            `json:"member_id,omitempty"`    // Filter by robot member ID
-	TeamID      string            `json:"team_id,omitempty"`      // Filter by team ID
-	TriggerType types.TriggerType `json:"trigger_type,omitempty"` // Filter by trigger type
-	Keyword     string            `json:"keyword,omitempty"`      // Search in delivery.content.summary
-	Limit       int               `json:"limit,omitempty"`
-	Offset      int               `json:"offset,omitempty"`
+	MemberID    string            `json:"member_id,omitempty"`
+	TeamID      string            `json:"team_id,omitempty"`
+	TriggerType types.TriggerType `json:"trigger_type,omitempty"`
+	Keyword     string            `json:"keyword,omitempty"`
+	Page        int               `json:"page,omitempty"`
+	PageSize    int               `json:"pagesize,omitempty"`
 }
 
 // ResultListResponse - paginated result list response
@@ -867,52 +908,43 @@ func (s *ExecutionStore) ListResults(ctx context.Context, opts *ResultListOption
 		}
 	}
 
-	// Get total count first
-	total, err := s.countWithWheres(wheres)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count results: %w", err)
-	}
-
-	// Set pagination defaults
-	limit := 20
-	offset := 0
+	page := 1
+	pageSize := 20
 	if opts != nil {
-		if opts.Limit > 0 {
-			limit = opts.Limit
-			if limit > 100 {
-				limit = 100
+		if opts.Page > 0 {
+			page = opts.Page
+		}
+		if opts.PageSize > 0 {
+			pageSize = opts.PageSize
+			if pageSize > 100 {
+				pageSize = 100
 			}
 		}
-		if opts.Offset > 0 {
-			offset = opts.Offset
-		}
-	}
-
-	// Calculate page from offset
-	page := 1
-	if limit > 0 && offset > 0 {
-		page = (offset / limit) + 1
 	}
 
 	params := model.QueryParam{
 		Wheres: wheres,
-		Limit:  limit,
-		Page:   page,
 		Orders: []model.QueryOrder{{Column: "end_time", Option: "desc"}},
 	}
 
-	rows, err := mod.Get(params)
+	res, err := mod.Paginate(params, page, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list results: %w", err)
 	}
 
-	records := make([]*ExecutionRecord, 0, len(rows))
-	for _, row := range rows {
+	total := 0
+	if v, ok := res["total"].(int64); ok {
+		total = int(v)
+	} else if v, ok := res["total"].(int); ok {
+		total = v
+	}
+
+	records := make([]*ExecutionRecord, 0)
+	for _, row := range toRows(res["data"]) {
 		record, err := s.mapToRecord(row)
 		if err != nil {
-			continue // skip invalid records
+			continue
 		}
-		// Double check delivery content exists
 		if record.Delivery != nil && record.Delivery.Content != nil {
 			records = append(records, record)
 		}
@@ -922,7 +954,7 @@ func (s *ExecutionStore) ListResults(ctx context.Context, opts *ResultListOption
 		Data:     records,
 		Total:    total,
 		Page:     page,
-		PageSize: limit,
+		PageSize: pageSize,
 	}, nil
 }
 
