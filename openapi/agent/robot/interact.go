@@ -1,10 +1,13 @@
 package robot
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yaoapp/kun/log"
+	"github.com/yaoapp/yao/agent/output/message"
 	robotapi "github.com/yaoapp/yao/agent/robot/api"
 	robottypes "github.com/yaoapp/yao/agent/robot/types"
 	"github.com/yaoapp/yao/openapi/oauth/authorized"
@@ -18,6 +21,7 @@ type InteractRequest struct {
 	Source      string `json:"source,omitempty"`
 	Message     string `json:"message" binding:"required"`
 	Action      string `json:"action,omitempty"`
+	Stream      bool   `json:"stream,omitempty"`
 }
 
 // InteractResponse - HTTP response for interaction
@@ -108,6 +112,14 @@ func InteractRobot(c *gin.Context) {
 		Action:      req.Action,
 	}
 
+	// Detect SSE mode: request body stream=true or Accept header
+	wantSSE := req.Stream || c.GetHeader("Accept") == "text/event-stream"
+
+	if wantSSE {
+		interactSSE(c, ctx, robotID, apiReq)
+		return
+	}
+
 	result, err := robotapi.Interact(ctx, robotID, apiReq)
 	if err != nil {
 		log.Error("Failed to interact with robot %s: %v", robotID, err)
@@ -128,6 +140,78 @@ func InteractRobot(c *gin.Context) {
 		WaitForMore: result.WaitForMore,
 	}
 	response.RespondWithSuccess(c, response.StatusOK, resp)
+}
+
+// interactSSE handles the SSE streaming mode for robot interaction.
+// Outputs standard CUI Message protocol (data: {json}\n\n) for direct frontend consumption,
+// plus a final "interact_done" event with execution metadata.
+func interactSSE(c *gin.Context, ctx *robottypes.Context, robotID string, apiReq *robotapi.InteractRequest) {
+	c.Header("Content-Type", "text/event-stream;charset=utf-8")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+
+	w := c.Writer
+	flusher, ok := w.(interface{ Flush() })
+	if !ok {
+		log.Error("ResponseWriter does not support Flush")
+		return
+	}
+
+	writeData := func(data interface{}) {
+		raw, err := json.Marshal(data)
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(w, "data: %s\n\n", raw)
+		flusher.Flush()
+	}
+
+	onMessage := func(msg *message.Message) int {
+		if msg == nil {
+			return 0
+		}
+		writeData(msg)
+		return 0
+	}
+
+	result, err := robotapi.InteractStreamRaw(ctx, robotID, apiReq, onMessage)
+	if err != nil {
+		writeData(&message.Message{
+			Type: message.TypeError,
+			Props: map[string]interface{}{
+				"message": err.Error(),
+			},
+		})
+		writeData(&message.Message{
+			Type: message.TypeEvent,
+			Props: map[string]interface{}{
+				"event":   "interact_done",
+				"message": "error",
+				"data": map[string]interface{}{
+					"status": "error",
+					"error":  err.Error(),
+				},
+			},
+		})
+		return
+	}
+
+	writeData(&message.Message{
+		Type: message.TypeEvent,
+		Props: map[string]interface{}{
+			"event":   "interact_done",
+			"message": result.Message,
+			"data": map[string]interface{}{
+				"execution_id":  result.ExecutionID,
+				"status":        result.Status,
+				"message":       result.Message,
+				"chat_id":       result.ChatID,
+				"reply":         result.Reply,
+				"wait_for_more": result.WaitForMore,
+			},
+		},
+	})
 }
 
 // ReplyToTask handles replying to a specific waiting task

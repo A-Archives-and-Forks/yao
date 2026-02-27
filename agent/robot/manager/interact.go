@@ -3,10 +3,12 @@ package manager
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yaoapp/kun/log"
 	agentcontext "github.com/yaoapp/yao/agent/context"
+	"github.com/yaoapp/yao/agent/output/message"
 	robotevents "github.com/yaoapp/yao/agent/robot/events"
 	"github.com/yaoapp/yao/agent/robot/executor/standard"
 	"github.com/yaoapp/yao/agent/robot/pool"
@@ -129,6 +131,13 @@ func (m *Manager) HandleInteract(ctx *types.Context, memberID string, req *Inter
 	case types.ExecWaiting:
 		return m.handleWaitingInteraction(ctx, robot, record, req, execStore)
 	case types.ExecRunning:
+		if record.WaitingTaskID == "" {
+			return &InteractResponse{
+				ExecutionID: record.ExecutionID,
+				Status:      "rejected",
+				Message:     "Execution is running and not waiting for input",
+			}, nil
+		}
 		return m.handleRunningInteraction(ctx, robot, record, req, execStore)
 	default:
 		return nil, fmt.Errorf("execution %s is in status %s, cannot interact", req.ExecutionID, record.Status)
@@ -333,26 +342,25 @@ func (m *Manager) callHostAgent(ctx *types.Context, agentID string, input *types
 		return nil, fmt.Errorf("host agent (%s) call failed: %w", agentID, err)
 	}
 
-	// Parse Host Agent response as JSON
+	return m.parseHostAgentResult(result)
+}
+
+// parseHostAgentResult inspects the agent result to determine if it is an action
+// decision (JSON with "action" field) or a conversational reply (natural language).
+func (m *Manager) parseHostAgentResult(result *standard.CallResult) (*types.HostOutput, error) {
 	data, err := result.GetJSON()
-	if err != nil {
-		text := result.GetText()
-		return &types.HostOutput{
-			Reply:  text,
-			Action: types.HostActionConfirm,
-		}, nil
+	if err == nil {
+		output := &types.HostOutput{}
+		raw, _ := json.Marshal(data)
+		if err := json.Unmarshal(raw, output); err == nil && output.Action != "" {
+			return output, nil
+		}
 	}
 
-	output := &types.HostOutput{}
-	raw, _ := json.Marshal(data)
-	if err := json.Unmarshal(raw, output); err != nil {
-		return &types.HostOutput{
-			Reply:  result.GetText(),
-			Action: types.HostActionConfirm,
-		}, nil
-	}
-
-	return output, nil
+	return &types.HostOutput{
+		Reply:       result.GetText(),
+		WaitForMore: true,
+	}, nil
 }
 
 // processHostAction processes the output from Host Agent and takes the appropriate action.
@@ -570,4 +578,410 @@ func (m *Manager) directResume(ctx *types.Context, record *store.ExecutionRecord
 		Message:     "Execution resumed and completed successfully",
 		ChatID:      record.ChatID,
 	}, nil
+}
+
+// ==================== Streaming Interact ====================
+
+// HandleInteractStream is the streaming version of HandleInteract.
+// It streams Host Agent text tokens via streamFn while still returning the final InteractResponse.
+func (m *Manager) HandleInteractStream(ctx *types.Context, memberID string, req *InteractRequest, streamFn standard.StreamCallback) (*InteractResponse, error) {
+	m.mu.RLock()
+	if !m.started {
+		m.mu.RUnlock()
+		return nil, fmt.Errorf("manager not started")
+	}
+	m.mu.RUnlock()
+
+	if memberID == "" {
+		return nil, fmt.Errorf("member_id is required")
+	}
+	if req == nil || req.Message == "" {
+		return nil, fmt.Errorf("message is required")
+	}
+
+	robot, _, err := m.getOrLoadRobot(ctx, memberID)
+	if err != nil {
+		return nil, fmt.Errorf("robot not found: %w", err)
+	}
+
+	execStore := store.NewExecutionStore()
+
+	if req.ExecutionID == "" {
+		return m.handleNewInteractionStream(ctx, robot, req, execStore, streamFn)
+	}
+
+	record, err := execStore.Get(ctx.Context, req.ExecutionID)
+	if err != nil {
+		return nil, fmt.Errorf("execution not found: %s", req.ExecutionID)
+	}
+
+	switch record.Status {
+	case types.ExecConfirming:
+		return m.handleConfirmingInteractionStream(ctx, robot, record, req, execStore, streamFn)
+	case types.ExecWaiting:
+		return m.handleWaitingInteractionStream(ctx, robot, record, req, execStore, streamFn)
+	case types.ExecRunning:
+		if record.WaitingTaskID == "" {
+			return &InteractResponse{
+				ExecutionID: record.ExecutionID,
+				Status:      "rejected",
+				Message:     "Execution is running and not waiting for input",
+			}, nil
+		}
+		return m.handleRunningInteractionStream(ctx, robot, record, req, execStore, streamFn)
+	default:
+		return nil, fmt.Errorf("execution %s is in status %s, cannot interact", req.ExecutionID, record.Status)
+	}
+}
+
+func (m *Manager) handleNewInteractionStream(ctx *types.Context, robot *types.Robot, req *InteractRequest, execStore *store.ExecutionStore, streamFn standard.StreamCallback) (*InteractResponse, error) {
+	exec, chatID, err := m.createConfirmingExecution(ctx, robot, req, execStore)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create confirming execution: %w", err)
+	}
+
+	hostOutput, err := m.callHostAgentForScenarioStream(ctx, robot, "assign", req.Message, nil, chatID, streamFn)
+	if err != nil {
+		log.Warn("Host Agent call failed, using direct assign: %v", err)
+		return m.directAssign(ctx, robot, exec, req, execStore)
+	}
+
+	resp, err := m.processHostAction(ctx, robot, exec, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = exec.ExecutionID
+	resp.ChatID = chatID
+	return resp, nil
+}
+
+func (m *Manager) handleConfirmingInteractionStream(ctx *types.Context, robot *types.Robot, record *store.ExecutionRecord, req *InteractRequest, execStore *store.ExecutionStore, streamFn standard.StreamCallback) (*InteractResponse, error) {
+	hostCtx := m.buildHostContext(robot, record, nil)
+	hostOutput, err := m.callHostAgentForScenarioStream(ctx, robot, "assign", req.Message, hostCtx, record.ChatID, streamFn)
+	if err != nil {
+		log.Warn("Host Agent call failed during confirming: %v", err)
+		return &InteractResponse{
+			ExecutionID: record.ExecutionID,
+			Status:      "error",
+			Message:     fmt.Sprintf("Host Agent failed: %v", err),
+		}, nil
+	}
+
+	resp, err := m.processHostAction(ctx, robot, record, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = record.ExecutionID
+	resp.ChatID = record.ChatID
+	return resp, nil
+}
+
+func (m *Manager) handleWaitingInteractionStream(ctx *types.Context, robot *types.Robot, record *store.ExecutionRecord, req *InteractRequest, execStore *store.ExecutionStore, streamFn standard.StreamCallback) (*InteractResponse, error) {
+	waitingTask := m.findWaitingTask(record)
+	hostCtx := m.buildHostContext(robot, record, waitingTask)
+
+	hostOutput, err := m.callHostAgentForScenarioStream(ctx, robot, "clarify", req.Message, hostCtx, record.ChatID, streamFn)
+	if err != nil {
+		log.Warn("Host Agent call failed during clarify, falling back to direct resume: %v", err)
+		return m.directResume(ctx, record, req)
+	}
+
+	resp, err := m.processHostAction(ctx, robot, record, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = record.ExecutionID
+	resp.ChatID = record.ChatID
+	return resp, nil
+}
+
+func (m *Manager) handleRunningInteractionStream(ctx *types.Context, robot *types.Robot, record *store.ExecutionRecord, req *InteractRequest, execStore *store.ExecutionStore, streamFn standard.StreamCallback) (*InteractResponse, error) {
+	hostCtx := m.buildHostContext(robot, record, nil)
+	hostOutput, err := m.callHostAgentForScenarioStream(ctx, robot, "guide", req.Message, hostCtx, record.ChatID, streamFn)
+	if err != nil {
+		return &InteractResponse{
+			ExecutionID: record.ExecutionID,
+			Status:      "acknowledged",
+			Message:     "Guidance noted (Host Agent unavailable)",
+		}, nil
+	}
+
+	resp, err := m.processHostAction(ctx, robot, record, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = record.ExecutionID
+	resp.ChatID = record.ChatID
+	return resp, nil
+}
+
+func (m *Manager) callHostAgentForScenarioStream(ctx *types.Context, robot *types.Robot, scenario string, msg string, hostCtx *types.HostContext, chatID string, streamFn standard.StreamCallback) (*types.HostOutput, error) {
+	agentID := ""
+	if robot.Config != nil && robot.Config.Resources != nil {
+		agentID = robot.Config.Resources.GetPhaseAgent(types.PhaseHost)
+	}
+	if agentID == "" {
+		return nil, fmt.Errorf("no Host Agent configured for robot %s", robot.MemberID)
+	}
+
+	return m.callHostAgentStream(ctx, agentID, &types.HostInput{
+		Scenario: scenario,
+		Messages: []agentcontext.Message{{Role: "user", Content: msg}},
+		Context:  hostCtx,
+	}, chatID, streamFn)
+}
+
+func (m *Manager) callHostAgentStream(ctx *types.Context, agentID string, input *types.HostInput, chatID string, streamFn standard.StreamCallback) (*types.HostOutput, error) {
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal host input: %w", err)
+	}
+
+	caller := standard.NewConversationCaller(chatID)
+	result, err := caller.CallWithMessagesStream(ctx, agentID, string(inputJSON), streamFn)
+	if err != nil {
+		return nil, fmt.Errorf("host agent (%s) call failed: %w", agentID, err)
+	}
+
+	return m.parseHostAgentResult(result)
+}
+
+// ==================== Raw Message Streaming (CUI Protocol) ====================
+
+// HandleInteractStreamRaw is the CUI-protocol-aligned streaming version of HandleInteract.
+// It passes raw message.Message objects directly to the onMessage callback, preserving all
+// CUI protocol fields for direct SSE passthrough to the frontend.
+func (m *Manager) HandleInteractStreamRaw(ctx *types.Context, memberID string, req *InteractRequest, onMessage agentcontext.OnMessageFunc) (*InteractResponse, error) {
+	m.mu.RLock()
+	if !m.started {
+		m.mu.RUnlock()
+		return nil, fmt.Errorf("manager not started")
+	}
+	m.mu.RUnlock()
+
+	if memberID == "" {
+		return nil, fmt.Errorf("member_id is required")
+	}
+	if req == nil || req.Message == "" {
+		return nil, fmt.Errorf("message is required")
+	}
+
+	robot, _, err := m.getOrLoadRobot(ctx, memberID)
+	if err != nil {
+		return nil, fmt.Errorf("robot not found: %w", err)
+	}
+
+	execStore := store.NewExecutionStore()
+
+	if req.ExecutionID == "" {
+		return m.handleNewInteractionStreamRaw(ctx, robot, req, execStore, onMessage)
+	}
+
+	record, err := execStore.Get(ctx.Context, req.ExecutionID)
+	if err != nil {
+		return nil, fmt.Errorf("execution not found: %s", req.ExecutionID)
+	}
+
+	switch record.Status {
+	case types.ExecConfirming:
+		return m.handleConfirmingInteractionStreamRaw(ctx, robot, record, req, execStore, onMessage)
+	case types.ExecWaiting:
+		return m.handleWaitingInteractionStreamRaw(ctx, robot, record, req, execStore, onMessage)
+	case types.ExecRunning:
+		if record.WaitingTaskID == "" {
+			return &InteractResponse{
+				ExecutionID: record.ExecutionID,
+				Status:      "rejected",
+				Message:     "Execution is running and not waiting for input",
+			}, nil
+		}
+		return m.handleRunningInteractionStreamRaw(ctx, robot, record, req, execStore, onMessage)
+	default:
+		return nil, fmt.Errorf("execution %s is in status %s, cannot interact", req.ExecutionID, record.Status)
+	}
+}
+
+func (m *Manager) handleNewInteractionStreamRaw(ctx *types.Context, robot *types.Robot, req *InteractRequest, execStore *store.ExecutionStore, onMessage agentcontext.OnMessageFunc) (*InteractResponse, error) {
+	exec, chatID, err := m.createConfirmingExecution(ctx, robot, req, execStore)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create confirming execution: %w", err)
+	}
+
+	hostOutput, err := m.callHostAgentForScenarioStreamRaw(ctx, robot, "assign", req.Message, nil, chatID, onMessage)
+	if err != nil {
+		log.Warn("Host Agent call failed, using direct assign: %v", err)
+		return m.directAssign(ctx, robot, exec, req, execStore)
+	}
+
+	resp, err := m.processHostAction(ctx, robot, exec, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = exec.ExecutionID
+	resp.ChatID = chatID
+	return resp, nil
+}
+
+func (m *Manager) handleConfirmingInteractionStreamRaw(ctx *types.Context, robot *types.Robot, record *store.ExecutionRecord, req *InteractRequest, execStore *store.ExecutionStore, onMessage agentcontext.OnMessageFunc) (*InteractResponse, error) {
+	hostCtx := m.buildHostContext(robot, record, nil)
+	hostOutput, err := m.callHostAgentForScenarioStreamRaw(ctx, robot, "assign", req.Message, hostCtx, record.ChatID, onMessage)
+	if err != nil {
+		log.Warn("Host Agent call failed during confirming: %v", err)
+		return &InteractResponse{
+			ExecutionID: record.ExecutionID,
+			Status:      "error",
+			Message:     fmt.Sprintf("Host Agent failed: %v", err),
+		}, nil
+	}
+
+	resp, err := m.processHostAction(ctx, robot, record, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = record.ExecutionID
+	resp.ChatID = record.ChatID
+	return resp, nil
+}
+
+func (m *Manager) handleWaitingInteractionStreamRaw(ctx *types.Context, robot *types.Robot, record *store.ExecutionRecord, req *InteractRequest, execStore *store.ExecutionStore, onMessage agentcontext.OnMessageFunc) (*InteractResponse, error) {
+	waitingTask := m.findWaitingTask(record)
+	hostCtx := m.buildHostContext(robot, record, waitingTask)
+
+	hostOutput, err := m.callHostAgentForScenarioStreamRaw(ctx, robot, "clarify", req.Message, hostCtx, record.ChatID, onMessage)
+	if err != nil {
+		log.Warn("Host Agent call failed during clarify, falling back to direct resume: %v", err)
+		return m.directResume(ctx, record, req)
+	}
+
+	resp, err := m.processHostAction(ctx, robot, record, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = record.ExecutionID
+	resp.ChatID = record.ChatID
+	return resp, nil
+}
+
+func (m *Manager) handleRunningInteractionStreamRaw(ctx *types.Context, robot *types.Robot, record *store.ExecutionRecord, req *InteractRequest, execStore *store.ExecutionStore, onMessage agentcontext.OnMessageFunc) (*InteractResponse, error) {
+	hostCtx := m.buildHostContext(robot, record, nil)
+	hostOutput, err := m.callHostAgentForScenarioStreamRaw(ctx, robot, "guide", req.Message, hostCtx, record.ChatID, onMessage)
+	if err != nil {
+		return &InteractResponse{
+			ExecutionID: record.ExecutionID,
+			Status:      "acknowledged",
+			Message:     "Guidance noted (Host Agent unavailable)",
+		}, nil
+	}
+
+	resp, err := m.processHostAction(ctx, robot, record, hostOutput, execStore)
+	if err != nil {
+		return nil, err
+	}
+	resp.ExecutionID = record.ExecutionID
+	resp.ChatID = record.ChatID
+	return resp, nil
+}
+
+func (m *Manager) callHostAgentForScenarioStreamRaw(ctx *types.Context, robot *types.Robot, scenario string, msg string, hostCtx *types.HostContext, chatID string, onMessage agentcontext.OnMessageFunc) (*types.HostOutput, error) {
+	agentID := ""
+	if robot.Config != nil && robot.Config.Resources != nil {
+		agentID = robot.Config.Resources.GetPhaseAgent(types.PhaseHost)
+	}
+	if agentID == "" {
+		return nil, fmt.Errorf("no Host Agent configured for robot %s", robot.MemberID)
+	}
+
+	return m.callHostAgentStreamRaw(ctx, agentID, &types.HostInput{
+		Scenario: scenario,
+		Messages: []agentcontext.Message{{Role: "user", Content: msg}},
+		Context:  hostCtx,
+	}, chatID, onMessage)
+}
+
+// callHostAgentStreamRaw calls the Host Agent with CUI raw message streaming.
+// It buffers text chunks that look like JSON output (starting with "{" or "```json")
+// so the frontend never sees raw decision JSON. If the final result is a decision,
+// the buffered chunks are discarded and a clean reply is sent instead. If the
+// result is a normal conversation turn, buffered chunks are flushed through.
+func (m *Manager) callHostAgentStreamRaw(ctx *types.Context, agentID string, input *types.HostInput, chatID string, onMessage agentcontext.OnMessageFunc) (*types.HostOutput, error) {
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal host input: %w", err)
+	}
+
+	var (
+		bufferedChunks  []*message.Message
+		buffering       bool
+		accumulatedText string
+		lastTextMsgID   string
+	)
+
+	wrappedOnMessage := func(msg *message.Message) int {
+		if msg == nil {
+			return onMessage(msg)
+		}
+
+		// Only intercept text type messages with delta content
+		if msg.Type != message.TypeText || !msg.Delta {
+			return onMessage(msg)
+		}
+
+		if msg.MessageID != "" {
+			lastTextMsgID = msg.MessageID
+		}
+
+		// Extract the text content from this chunk
+		chunkText := ""
+		if msg.Props != nil {
+			if c, ok := msg.Props["content"].(string); ok {
+				chunkText = c
+			}
+		}
+		accumulatedText += chunkText
+
+		// Decide whether to buffer: check accumulated text so far
+		trimmed := strings.TrimSpace(accumulatedText)
+		if !buffering && len(trimmed) > 0 {
+			if trimmed[0] == '{' || strings.HasPrefix(trimmed, "```") {
+				buffering = true
+			}
+		}
+
+		if buffering {
+			bufferedChunks = append(bufferedChunks, msg)
+			return 0
+		}
+
+		return onMessage(msg)
+	}
+
+	caller := standard.NewConversationCaller(chatID)
+	result, err := caller.CallWithMessagesStreamRaw(ctx, agentID, string(inputJSON), wrappedOnMessage)
+	if err != nil {
+		return nil, fmt.Errorf("host agent (%s) call failed: %w", agentID, err)
+	}
+
+	output, err := m.parseHostAgentResult(result)
+	if err != nil {
+		return nil, err
+	}
+
+	if output.Action != "" && lastTextMsgID != "" {
+		// Decision detected — discard buffered JSON chunks, send reply text
+		onMessage(&message.Message{
+			Type:      message.TypeText,
+			MessageID: lastTextMsgID,
+			Props:     map[string]interface{}{"content": output.Reply},
+			Delta:     false,
+		})
+	} else if len(bufferedChunks) > 0 {
+		// Not a decision — flush all buffered chunks to the frontend
+		for _, chunk := range bufferedChunks {
+			if onMessage(chunk) != 0 {
+				break
+			}
+		}
+	}
+
+	return output, nil
 }

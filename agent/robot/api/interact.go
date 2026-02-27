@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 
+	agentcontext "github.com/yaoapp/yao/agent/context"
 	"github.com/yaoapp/yao/agent/robot/executor/standard"
 	"github.com/yaoapp/yao/agent/robot/manager"
 	"github.com/yaoapp/yao/agent/robot/types"
@@ -119,6 +120,84 @@ func Confirm(ctx *types.Context, memberID string, execID string, message string)
 		Message:     message,
 		Action:      "confirm",
 	})
+}
+
+// InteractStream is the streaming version of Interact.
+// It streams Host Agent text tokens via streamFn while still returning the final InteractResult.
+// V1 fallback does not support streaming and returns an error.
+func InteractStream(ctx *types.Context, memberID string, req *InteractRequest, streamFn standard.StreamCallback) (*InteractResult, error) {
+	if memberID == "" {
+		return nil, fmt.Errorf("member_id is required")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("interact request is required")
+	}
+
+	mgr, err := getManager()
+	if err != nil || mgr == nil {
+		return nil, fmt.Errorf("streaming requires V2 manager (not available)")
+	}
+
+	mgrReq := &manager.InteractRequest{
+		ExecutionID: req.ExecutionID,
+		TaskID:      req.TaskID,
+		Source:      req.Source,
+		Message:     req.Message,
+		Action:      req.Action,
+	}
+
+	resp, err := mgr.HandleInteractStream(ctx, memberID, mgrReq, streamFn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &InteractResult{
+		ExecutionID: resp.ExecutionID,
+		Status:      resp.Status,
+		Message:     resp.Message,
+		ChatID:      resp.ChatID,
+		Reply:       resp.Reply,
+		WaitForMore: resp.WaitForMore,
+	}, nil
+}
+
+// InteractStreamRaw is the CUI-protocol-aligned streaming version of Interact.
+// It passes raw message.Message objects to the onMessage callback, preserving all CUI
+// protocol fields for direct SSE passthrough to the frontend.
+func InteractStreamRaw(ctx *types.Context, memberID string, req *InteractRequest, onMessage agentcontext.OnMessageFunc) (*InteractResult, error) {
+	if memberID == "" {
+		return nil, fmt.Errorf("member_id is required")
+	}
+	if req == nil {
+		return nil, fmt.Errorf("interact request is required")
+	}
+
+	mgr, err := getManager()
+	if err != nil || mgr == nil {
+		return nil, fmt.Errorf("raw streaming requires V2 manager (not available)")
+	}
+
+	mgrReq := &manager.InteractRequest{
+		ExecutionID: req.ExecutionID,
+		TaskID:      req.TaskID,
+		Source:      req.Source,
+		Message:     req.Message,
+		Action:      req.Action,
+	}
+
+	resp, err := mgr.HandleInteractStreamRaw(ctx, memberID, mgrReq, onMessage)
+	if err != nil {
+		return nil, err
+	}
+
+	return &InteractResult{
+		ExecutionID: resp.ExecutionID,
+		Status:      resp.Status,
+		Message:     resp.Message,
+		ChatID:      resp.ChatID,
+		Reply:       resp.Reply,
+		WaitForMore: resp.WaitForMore,
+	}, nil
 }
 
 // CancelExecution cancels a waiting/confirming execution via the manager.
