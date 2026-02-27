@@ -393,9 +393,34 @@ func convertAttachments(ctx context.Context, attachments []robottypes.DeliveryAt
 			log.Warn("convertAttachments: failed to read file fileID=%q uploader=%q: %v", fileID, uploader, err)
 			continue
 		}
-		log.Info("convertAttachments: added attachment filename=%q contentType=%q size=%d", info.Filename, info.ContentType, len(content))
+
+		// Prefer the semantic title from the delivery agent over the raw storage filename.
+		// The storage filename may be an auto-generated zip name (e.g. output_xxx.zip),
+		// while att.Title is the human-readable name set by the delivery agent.
+		filename := info.Filename
+		if att.Title != "" {
+			// Keep the original file extension from storage so the email client
+			// knows how to open it, but use the human-readable title as the base name.
+			ext := ""
+			if idx := strings.LastIndex(info.Filename, "."); idx >= 0 {
+				ext = info.Filename[idx:]
+			}
+			titleExt := ""
+			if idx := strings.LastIndex(att.Title, "."); idx >= 0 {
+				titleExt = att.Title[idx:]
+			}
+			if titleExt != "" {
+				// Title already has an extension — use it as-is.
+				filename = att.Title
+			} else {
+				// Title has no extension — append the storage extension.
+				filename = att.Title + ext
+			}
+		}
+
+		log.Info("convertAttachments: added attachment filename=%q contentType=%q size=%d", filename, info.ContentType, len(content))
 		result = append(result, messengerTypes.Attachment{
-			Filename:    info.Filename,
+			Filename:    filename,
 			ContentType: info.ContentType,
 			Content:     content,
 		})
