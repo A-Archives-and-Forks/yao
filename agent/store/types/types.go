@@ -50,11 +50,12 @@ type Chat struct {
 
 // ChatFilter for listing chats
 type ChatFilter struct {
-	UserID      string `json:"user_id,omitempty"`
-	TeamID      string `json:"team_id,omitempty"`
-	AssistantID string `json:"assistant_id,omitempty"`
-	Status      string `json:"status,omitempty"`
-	Keywords    string `json:"keywords,omitempty"`
+	UserID       string `json:"user_id,omitempty"`
+	TeamID       string `json:"team_id,omitempty"`
+	AssistantID  string `json:"assistant_id,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Keywords     string `json:"keywords,omitempty"`
+	ChatIDPrefix string `json:"chat_id_prefix,omitempty"`
 
 	// Time range filter
 	StartTime *time.Time `json:"start_time,omitempty"` // Filter chats after this time

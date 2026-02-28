@@ -102,6 +102,14 @@ func (e *Executor) ExecuteWithControl(ctx *robottypes.Context, robot *robottypes
 		}
 	}
 
+	// If goals are pre-confirmed (passed via Input.Data["goals"]), inject them directly.
+	// RunGoals will skip LLM call when exec.Goals is already populated (§18.2).
+	if exec.Goals == nil && input != nil && input.Data != nil {
+		if goalsStr, ok := input.Data["goals"].(string); ok && goalsStr != "" {
+			exec.Goals = &robottypes.Goals{Content: goalsStr}
+		}
+	}
+
 	// Initialize UI display fields (with i18n support)
 	exec.Name, exec.CurrentTaskName = e.initUIFields(trigger, input, robot)
 
@@ -120,6 +128,21 @@ func (e *Executor) ExecuteWithControl(ctx *robottypes.Context, robot *robottypes
 				"error":        err,
 			}).Warn("Failed to persist execution record: %v", err)
 		}
+
+		// If goals were pre-injected, persist them and update the execution title
+		if exec.Goals != nil && exec.Goals.Content != "" {
+			if err := e.store.UpdatePhase(ctx.Context, exec.ID, robottypes.PhaseGoals, exec.Goals); err != nil {
+				log.With(log.F{
+					"execution_id": exec.ID,
+					"member_id":    exec.MemberID,
+					"error":        err,
+				}).Warn("Failed to persist pre-confirmed goals: %v", err)
+			}
+			if goalName := extractGoalName(exec.Goals); goalName != "" {
+				e.updateUIFields(ctx, exec, goalName, "")
+			}
+		}
+
 	}
 
 	// Acquire execution slot

@@ -30,6 +30,7 @@ func BuildTriggerInput(trigger robottypes.TriggerType, data interface{}) *robott
 			input.EventType = req.EventType
 			input.Data = req.Data
 		}
+
 	}
 
 	return input
