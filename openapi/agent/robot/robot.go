@@ -3,6 +3,8 @@ package robot
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/yaoapp/yao/openapi/oauth/types"
+
+	_ "github.com/yaoapp/yao/agent/robot" // register robot.* process handlers
 )
 
 // Attach attaches the robot API handlers to the router with OAuth protection
@@ -41,6 +43,14 @@ func Attach(group *gin.RouterGroup, oauth types.OAuth) {
 	// Trigger & Intervene
 	group.POST("/:id/trigger", TriggerRobot)     // POST /robots/:id/trigger - Trigger robot execution
 	group.POST("/:id/intervene", InterveneRobot) // POST /robots/:id/intervene - Human intervention
+
+	// Host Agent Chat (mirror of standard Chat Completion API)
+	group.GET("/:id/host", RobotHostID)                                    // GET /robots/:id/host - Get host assistant ID
+	group.POST("/:id/completions", RobotCompletions)                       // POST /robots/:id/completions - Chat with host agent
+	group.POST("/:id/completions/:context_id/append", RobotAppendMessages) // POST /robots/:id/completions/:context_id/append - Append messages
+
+	// Execute - Direct execution trigger (called by CUI after Host confirms goals)
+	group.POST("/:id/execute", ExecuteRobot) // POST /robots/:id/execute - Execute with confirmed goals
 
 	// V2: Unified Interact API (suspend-resume, human-in-the-loop)
 	group.POST("/:id/interact", InteractRobot)                               // POST /robots/:id/interact - Unified interaction
