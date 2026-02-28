@@ -1,6 +1,9 @@
 package openapi
 
 import (
+	"os"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/yaoapp/yao/share"
 )
@@ -35,6 +38,11 @@ type YaoMetadata struct {
 	OpenAPI   string `json:"openapi"`              // OpenAPI base URL (e.g., "/v1")
 	IssuerURL string `json:"issuer_url,omitempty"` // OAuth issuer URL
 
+	// Public server URL — the externally accessible base URL for this instance.
+	// Clients, proxies, and integrations should use this to construct API endpoints.
+	// Set via env YAO_SERVER_URL; falls back to issuer_url (stripped of path), then empty.
+	ServerURL string `json:"server_url,omitempty"`
+
 	// Dashboard configuration
 	Dashboard string                 `json:"dashboard,omitempty"` // Admin dashboard root path
 	Optional  map[string]interface{} `json:"optional,omitempty"`  // Optional settings
@@ -57,6 +65,7 @@ func (openapi *OpenAPI) yaoMetadata(c *gin.Context) {
 		Description: share.App.Description,
 		OpenAPI:     openapi.Config.BaseURL,
 		IssuerURL:   openapi.Config.OAuth.IssuerURL,
+		ServerURL:   resolveServerURL(openapi.Config.OAuth.IssuerURL),
 		Dashboard:   "/" + dashboard,
 		Optional:    share.App.Optional,
 	}
@@ -67,6 +76,25 @@ func (openapi *OpenAPI) yaoMetadata(c *gin.Context) {
 	}
 
 	c.JSON(200, metadata)
+}
+
+// resolveServerURL returns the public server URL for this instance.
+// Priority: YAO_SERVER_URL env > issuer_url origin > empty string.
+func resolveServerURL(issuerURL string) string {
+	if v := strings.TrimRight(os.Getenv("YAO_SERVER_URL"), "/"); v != "" {
+		return v
+	}
+	// Strip path from issuer_url to get just the origin (scheme + host + port)
+	if issuerURL != "" {
+		if idx := strings.Index(issuerURL, "://"); idx != -1 {
+			rest := issuerURL[idx+3:]
+			if slash := strings.Index(rest, "/"); slash != -1 {
+				return issuerURL[:idx+3] + rest[:slash]
+			}
+		}
+		return issuerURL
+	}
+	return ""
 }
 
 // oauthServerMetadata returns authorization server metadata - RFC 8414
