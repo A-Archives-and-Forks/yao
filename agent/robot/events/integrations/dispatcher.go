@@ -184,6 +184,9 @@ func parseIntegrations(intg *robottypes.Integrations) []string {
 	if intg.DingTalk != nil {
 		keys = append(keys, "dingtalk")
 	}
+	if intg.Discord != nil {
+		keys = append(keys, "discord")
+	}
 	return keys
 }
 

@@ -8,6 +8,7 @@ import (
 	robotevents "github.com/yaoapp/yao/agent/robot/events"
 	"github.com/yaoapp/yao/agent/robot/events/integrations"
 	dtadapter "github.com/yaoapp/yao/agent/robot/events/integrations/dingtalk"
+	dcadapter "github.com/yaoapp/yao/agent/robot/events/integrations/discord"
 	fsadapter "github.com/yaoapp/yao/agent/robot/events/integrations/feishu"
 	"github.com/yaoapp/yao/agent/robot/events/integrations/telegram"
 	"github.com/yaoapp/yao/agent/robot/logger"
@@ -63,6 +64,7 @@ func Start() error {
 		"telegram": telegram.NewAdapter(),
 		"feishu":   fsadapter.NewAdapter(),
 		"dingtalk": dtadapter.NewAdapter(),
+		"discord":  dcadapter.NewAdapter(),
 	}
 	globalDispatcher = integrations.NewDispatcher(globalManager.Cache(), adapters)
 	if err := globalDispatcher.Start(context.Background()); err != nil {

@@ -27,6 +27,7 @@ type Integrations struct {
 	Telegram *TelegramConfig `json:"telegram,omitempty"`
 	Feishu   *FeishuConfig   `json:"feishu,omitempty"`
 	DingTalk *DingTalkConfig `json:"dingtalk,omitempty"`
+	Discord  *DiscordConfig  `json:"discord,omitempty"`
 }
 
 // TelegramConfig holds Telegram Bot integration settings.
@@ -51,6 +52,13 @@ type DingTalkConfig struct {
 	Enabled      bool   `json:"enabled"`
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
+}
+
+// DiscordConfig holds Discord Bot integration settings.
+type DiscordConfig struct {
+	Enabled  bool   `json:"enabled"`
+	BotToken string `json:"bot_token"`
+	AppID    string `json:"app_id,omitempty"`
 }
 
 // ExecutorConfig - executor settings
