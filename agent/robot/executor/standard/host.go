@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/yaoapp/kun/log"
+	kunlog "github.com/yaoapp/kun/log"
 	robottypes "github.com/yaoapp/yao/agent/robot/types"
 )
 
@@ -31,7 +31,7 @@ func (e *Executor) CallHostAgent(ctx *robottypes.Context, robot *robottypes.Robo
 		return nil, fmt.Errorf("failed to marshal host input: %w", err)
 	}
 
-	log.Info("calling Host Agent %s for scenario=%s chatID=%s", agentID, input.Scenario, chatID)
+	kunlog.Info("calling Host Agent %s for scenario=%s chatID=%s", agentID, input.Scenario, chatID)
 
 	caller := NewConversationCaller(chatID)
 	result, err := caller.CallWithMessages(ctx, agentID, string(inputJSON))
@@ -42,7 +42,7 @@ func (e *Executor) CallHostAgent(ctx *robottypes.Context, robot *robottypes.Robo
 	data, err := result.GetJSON()
 	if err != nil {
 		text := result.GetText()
-		log.Warn("Host Agent returned non-JSON response, treating as confirm: %s", text)
+		kunlog.Warn("Host Agent returned non-JSON response, treating as confirm: %s", text)
 		return &robottypes.HostOutput{
 			Reply:  text,
 			Action: robottypes.HostActionConfirm,

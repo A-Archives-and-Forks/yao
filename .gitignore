@@ -69,3 +69,6 @@ sandbox/DESIGN-REMOTE.md
 event/DESIGN.md
 event/TODO.md
 agent/robot/DESIGN-V2.md
+tg-session.json
+tg-login
+tg-send

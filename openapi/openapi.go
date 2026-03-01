@@ -13,6 +13,7 @@ import (
 	"github.com/yaoapp/yao/openapi/dsl"
 	"github.com/yaoapp/yao/openapi/file"
 	"github.com/yaoapp/yao/openapi/hello"
+	openintegrations "github.com/yaoapp/yao/openapi/integrations"
 	"github.com/yaoapp/yao/openapi/job"
 	"github.com/yaoapp/yao/openapi/kb"
 	"github.com/yaoapp/yao/openapi/llm"
@@ -148,6 +149,9 @@ func (openapi *OpenAPI) Attach(router *gin.Engine) {
 
 	// Messenger webhook handlers
 	messenger.Attach(group.Group("/messenger"), openapi.OAuth)
+
+	// Integrations webhook handlers (public, no OAuth - external platforms push here)
+	openintegrations.Attach(group.Group("/integrations"))
 
 	// Agent handlers
 	agent.Attach(group.Group("/agent"), openapi.OAuth)

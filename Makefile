@@ -11,14 +11,14 @@ OS := $(shell uname)
 
 # ROOT_DIR := $(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 TESTFOLDER := $(shell $(GO) list ./... | grep -vE 'examples|openai|aigc|neo|twilio|share*' | awk '!/\/tests\// || /openapi\/tests/')
-# Core tests (exclude AI-related: agent, aigc, openai, KB, and sandbox which requires Docker)
-TESTFOLDER_CORE := $(shell $(GO) list ./... | grep -vE 'examples|openai|aigc|neo|twilio|share*|agent|kb|sandbox' | awk '!/\/tests\// || /openapi\/tests/')
+# Core tests (exclude AI-related: agent, aigc, openai, KB, sandbox, and integrations which require external services)
+TESTFOLDER_CORE := $(shell $(GO) list ./... | grep -vE 'examples|openai|aigc|neo|twilio|share*|agent|kb|sandbox|integrations' | awk '!/\/tests\// || /openapi\/tests/')
 # Agent tests (agent, aigc) - exclude agent/search/handlers/web (requires external API keys) and robot packages (tested in robot job)
 TESTFOLDER_AGENT := $(shell $(GO) list ./agent/... ./aigc/... | grep -vE 'agent/search/handlers/web|agent/robot/')
 # KB tests (kb)
 TESTFOLDER_KB := $(shell $(GO) list ./kb/...)
-# Robot tests (all agent/robot/... packages) - runs ALL tests (unit + E2E) with real LLM calls
-TESTFOLDER_ROBOT := $(shell $(GO) list ./agent/robot/...)
+# Robot tests (agent/robot/... packages, excluding events/integrations which require Telegram etc.)
+TESTFOLDER_ROBOT := $(shell $(GO) list ./agent/robot/... | grep -vE 'agent/robot/events')
 # Sandbox tests (requires Docker)
 TESTFOLDER_SANDBOX := $(shell $(GO) list ./sandbox/...)
 TESTTAGS ?= ""

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/yaoapp/gou/model"
-	"github.com/yaoapp/kun/log"
+	kunlog "github.com/yaoapp/kun/log"
 	robotevents "github.com/yaoapp/yao/agent/robot/events"
 	robottypes "github.com/yaoapp/yao/agent/robot/types"
 	"github.com/yaoapp/yao/event"
@@ -82,16 +82,31 @@ func (e *Executor) RunDelivery(ctx *robottypes.Context, exec *robottypes.Executi
 // Registered handlers (see events/handlers.go) route to email/webhook/process channels.
 func (e *Executor) pushDeliveryEvent(ctx *robottypes.Context, exec *robottypes.Execution, robot *robottypes.Robot) error {
 	prefs := buildDeliveryPreferences(robot)
+
+	chatID := exec.ChatID
+	var extra map[string]any
+	if exec.Input != nil && exec.Input.Data != nil {
+		if sourceChatID, ok := exec.Input.Data["chat_id"].(string); ok && sourceChatID != "" {
+			if channel, ok := exec.Input.Data["channel"].(string); ok && channel != "" {
+				chatID = channel + ":" + sourceChatID
+			}
+		}
+		if e, ok := exec.Input.Data["extra"].(map[string]any); ok {
+			extra = e
+		}
+	}
+
 	_, err := event.Push(ctx.Context, robotevents.Delivery, robotevents.DeliveryPayload{
 		ExecutionID: exec.ID,
 		MemberID:    exec.MemberID,
 		TeamID:      exec.TeamID,
-		ChatID:      exec.ChatID,
+		ChatID:      chatID,
 		Content:     exec.Delivery.Content,
 		Preferences: prefs,
+		Extra:       extra,
 	})
 	if err != nil {
-		log.Error("delivery event push failed: execution=%s error=%v", exec.ID, err)
+		kunlog.Error("delivery event push failed: execution=%s error=%v", exec.ID, err)
 	}
 	return nil
 }
