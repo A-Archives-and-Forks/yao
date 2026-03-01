@@ -178,9 +178,12 @@ func parseIntegrations(intg *robottypes.Integrations) []string {
 	if intg.Telegram != nil {
 		keys = append(keys, "telegram")
 	}
-	// if intg.Discord != nil { keys = append(keys, "discord") }
-	// if intg.DingTalk != nil { keys = append(keys, "dingtalk") }
-	// if intg.Lark != nil { keys = append(keys, "lark") }
+	if intg.Feishu != nil {
+		keys = append(keys, "feishu")
+	}
+	if intg.DingTalk != nil {
+		keys = append(keys, "dingtalk")
+	}
 	return keys
 }
 

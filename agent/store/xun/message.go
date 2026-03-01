@@ -140,17 +140,19 @@ func (store *Xun) GetMessages(chatID string, filter types.MessageFilter) ([]*typ
 		qb.Where("type", filter.Type)
 	}
 
-	// When a Limit is specified we want the N most-recent messages (not the
-	// N oldest).  Strategy: query DESC to get the latest rows, then reverse
+	// When Limit is specified WITHOUT Offset, we want the N most-recent
+	// messages.  Strategy: query DESC to get the latest rows, then reverse
 	// the slice so the caller receives them in chronological (ASC) order.
+	// When Offset is also present, the caller is doing forward pagination,
+	// so we keep ASC order and apply Limit+Offset normally.
 	needReverse := false
-	if filter.Limit > 0 {
+	if filter.Limit > 0 && filter.Offset <= 0 {
 		qb.Limit(filter.Limit)
-		if filter.Offset > 0 {
-			qb.Offset(filter.Offset)
-		}
 		qb.OrderBy("id", "desc")
 		needReverse = true
+	} else if filter.Limit > 0 && filter.Offset > 0 {
+		qb.Limit(filter.Limit).Offset(filter.Offset)
+		qb.OrderBy("id", "asc")
 	} else {
 		if filter.Offset > 0 {
 			qb.Limit(1000000).Offset(filter.Offset)

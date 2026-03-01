@@ -7,6 +7,8 @@ import (
 
 	robotevents "github.com/yaoapp/yao/agent/robot/events"
 	"github.com/yaoapp/yao/agent/robot/events/integrations"
+	dtadapter "github.com/yaoapp/yao/agent/robot/events/integrations/dingtalk"
+	fsadapter "github.com/yaoapp/yao/agent/robot/events/integrations/feishu"
 	"github.com/yaoapp/yao/agent/robot/events/integrations/telegram"
 	"github.com/yaoapp/yao/agent/robot/logger"
 	"github.com/yaoapp/yao/agent/robot/manager"
@@ -59,6 +61,8 @@ func Start() error {
 	// Start integration dispatcher (Telegram polling, webhook subscriptions, etc.)
 	adapters := map[string]integrations.Adapter{
 		"telegram": telegram.NewAdapter(),
+		"feishu":   fsadapter.NewAdapter(),
+		"dingtalk": dtadapter.NewAdapter(),
 	}
 	globalDispatcher = integrations.NewDispatcher(globalManager.Cache(), adapters)
 	if err := globalDispatcher.Start(context.Background()); err != nil {
