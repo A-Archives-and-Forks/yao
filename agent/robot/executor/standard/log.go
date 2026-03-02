@@ -5,19 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yaoapp/kun/log"
+	kunlog "github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/config"
 
+	"github.com/yaoapp/yao/agent/robot/logger"
 	robottypes "github.com/yaoapp/yao/agent/robot/types"
 )
 
-// execLogger provides structured, developer-facing logging for a single Robot execution.
-// Each execution (Executor.ExecuteWithControl) creates one instance; it is passed to
-// RunTasks (P2) and Runner (P3) so every log line carries the same identity.
-//
-// Output routing:
-//   - development mode (config.IsDevelopment): human-readable console via fmt.Printf
-//   - production mode: structured fields via kun/log
+var log = logger.New("exec")
+
 type execLogger struct {
 	robot  *robottypes.Robot
 	execID string
@@ -42,15 +38,14 @@ func (l *execLogger) connector() string {
 }
 
 // ---------------------------------------------------------------------------
-// P2: Task Overview — called once after RunTasks successfully generates tasks
+// P2: Task Overview
 // ---------------------------------------------------------------------------
 
 func (l *execLogger) logTaskOverview(tasks []robottypes.Task) {
 	if config.IsDevelopment() {
 		l.devTaskOverview(tasks)
 	}
-	// Always emit structured log (Info level, hidden in prod unless needed)
-	log.With(log.F{
+	kunlog.With(kunlog.F{
 		"robot_id":       l.robotID(),
 		"execution_id":   l.execID,
 		"phase":          "tasks",
@@ -60,11 +55,21 @@ func (l *execLogger) logTaskOverview(tasks []robottypes.Task) {
 }
 
 func (l *execLogger) devTaskOverview(tasks []robottypes.Task) {
+	w := logger.Gray
+	h := logger.BoldCyan
+	v := logger.White
+	r := logger.Reset
+
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s ══════ P2: Task Overview ══════\n", l.prefix()))
+	sb.WriteString(fmt.Sprintf("\n%s%s%s\n", h, strings.Repeat("═", 60), r))
+	sb.WriteString(fmt.Sprintf("%s  TASK OVERVIEW%s\n", h, r))
+	sb.WriteString(fmt.Sprintf("%s%s%s\n", h, strings.Repeat("─", 60), r))
+	sb.WriteString(fmt.Sprintf("%s  Robot:     %s%s%s\n", w, v, l.robotID(), r))
+	sb.WriteString(fmt.Sprintf("%s  Exec:      %s%s%s\n", w, v, l.execID, r))
 	if l.connector() != "" {
-		sb.WriteString(fmt.Sprintf("  Language Model: %s\n", l.connector()))
+		sb.WriteString(fmt.Sprintf("%s  Model:     %s%s%s\n", w, v, l.connector(), r))
 	}
+	sb.WriteString(fmt.Sprintf("%s%s%s\n", w, strings.Repeat("─", 60), r))
 	for i, t := range tasks {
 		desc := t.Description
 		if desc == "" && len(t.Messages) > 0 {
@@ -72,22 +77,26 @@ func (l *execLogger) devTaskOverview(tasks []robottypes.Task) {
 				desc = s
 			}
 		}
-		desc = truncate(desc, 80)
-		sb.WriteString(fmt.Sprintf("  #%d %s [%s:%s] %q\n", i+1, t.ID, t.ExecutorType, t.ExecutorID, desc))
+		desc = truncate(desc, 72)
+		sb.WriteString(fmt.Sprintf("%s  #%d %s%s%s [%s:%s]\n", w, i+1, v, t.ID, r, t.ExecutorType, t.ExecutorID))
+		sb.WriteString(fmt.Sprintf("%s     %s%s\n", w, desc, r))
 	}
-	sb.WriteString(fmt.Sprintf("  Total: %d tasks\n", len(tasks)))
-	fmt.Print(sb.String())
+	sb.WriteString(fmt.Sprintf("%s%s%s\n", w, strings.Repeat("─", 60), r))
+	sb.WriteString(fmt.Sprintf("%s  Total: %s%d tasks%s\n", w, v, len(tasks), r))
+	sb.WriteString(fmt.Sprintf("%s%s%s\n", h, strings.Repeat("═", 60), r))
+
+	logger.Raw(sb.String())
 }
 
 // ---------------------------------------------------------------------------
-// P3: Task Input — called before each task execution with the full prompt
+// P3: Task Input
 // ---------------------------------------------------------------------------
 
 func (l *execLogger) logTaskInput(task *robottypes.Task, prompt string) {
 	if config.IsDevelopment() {
 		l.devTaskInput(task, prompt)
 	}
-	log.With(log.F{
+	kunlog.With(kunlog.F{
 		"robot_id":       l.robotID(),
 		"execution_id":   l.execID,
 		"task_id":        task.ID,
@@ -99,14 +108,19 @@ func (l *execLogger) logTaskInput(task *robottypes.Task, prompt string) {
 }
 
 func (l *execLogger) devTaskInput(task *robottypes.Task, prompt string) {
-	sep := strings.Repeat("─", 40)
-	fmt.Printf("%s ▶ Task %s [%s:%s]\n", l.prefix(), task.ID, task.ExecutorType, task.ExecutorID)
-	fmt.Printf("  Prompt (%d chars):\n  %s\n%s\n  %s\n",
-		len(prompt), sep, indentText(prompt, "  "), sep)
+	w := logger.Gray
+	v := logger.White
+	r := logger.Reset
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%s  ▶ Task %s%s%s [%s:%s]  Prompt: %d chars%s\n",
+		w, v, task.ID, w, task.ExecutorType, task.ExecutorID, len(prompt), r))
+
+	logger.Raw(sb.String())
 }
 
 // ---------------------------------------------------------------------------
-// P3: Task Output — called after each task execution with the result
+// P3: Task Output
 // ---------------------------------------------------------------------------
 
 func (l *execLogger) logTaskOutput(task *robottypes.Task, result *robottypes.TaskResult) {
@@ -114,7 +128,7 @@ func (l *execLogger) logTaskOutput(task *robottypes.Task, result *robottypes.Tas
 		l.devTaskOutput(task, result)
 	}
 
-	fields := log.F{
+	fields := kunlog.F{
 		"robot_id":       l.robotID(),
 		"execution_id":   l.execID,
 		"task_id":        result.TaskID,
@@ -130,24 +144,39 @@ func (l *execLogger) logTaskOutput(task *robottypes.Task, result *robottypes.Tas
 		fields["error"] = result.Error
 	}
 	if result.Success {
-		log.With(fields).Info("Task completed: %s (%dms)", result.TaskID, result.Duration)
+		kunlog.With(fields).Info("Task completed: %s (%dms)", result.TaskID, result.Duration)
 	} else {
-		log.With(fields).Warn("Task failed: %s (%dms) %s", result.TaskID, result.Duration, result.Error)
+		kunlog.With(fields).Warn("Task failed: %s (%dms) %s", result.TaskID, result.Duration, result.Error)
 	}
 }
 
 func (l *execLogger) devTaskOutput(task *robottypes.Task, result *robottypes.TaskResult) {
+	w := logger.Gray
+	v := logger.White
+	g := logger.BoldGreen
+	rd := logger.BoldRed
+	r := logger.Reset
+
+	var sb strings.Builder
 	if result.Success {
-		fmt.Printf("%s ✓ Task %s completed (%dms)\n", l.prefix(), result.TaskID, result.Duration)
-		fmt.Printf("  Output: %s\n", outputSummary(result.Output))
+		sb.WriteString(fmt.Sprintf("%s  ✓ %s%s%s completed %s(%dms)%s\n",
+			g, v, result.TaskID, g, w, result.Duration, r))
+		out := outputSummary(result.Output)
+		if len(out) > 120 {
+			out = out[:120] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("%s    Output: %s%s%s\n", w, v, out, r))
 	} else {
-		fmt.Printf("%s ✗ Task %s failed (%dms)\n", l.prefix(), result.TaskID, result.Duration)
-		fmt.Printf("  Error: %s\n", result.Error)
+		sb.WriteString(fmt.Sprintf("%s  ✗ %s%s%s failed %s(%dms)%s\n",
+			rd, v, result.TaskID, rd, w, result.Duration, r))
+		sb.WriteString(fmt.Sprintf("%s    Error:  %s%s%s\n", w, logger.Red, result.Error, r))
 	}
+
+	logger.Raw(sb.String())
 }
 
 // ---------------------------------------------------------------------------
-// Agent Call — called after every AgentCaller.Call returns
+// Agent Call
 // ---------------------------------------------------------------------------
 
 func (l *execLogger) logAgentCall(agentID string, result *CallResult) {
@@ -158,7 +187,7 @@ func (l *execLogger) logAgentCall(agentID string, result *CallResult) {
 		l.devAgentCall(agentID, result)
 	}
 
-	fields := log.F{
+	fields := kunlog.F{
 		"robot_id":       l.robotID(),
 		"execution_id":   l.execID,
 		"agent_id":       agentID,
@@ -169,16 +198,25 @@ func (l *execLogger) logAgentCall(agentID string, result *CallResult) {
 		fields["next_type"] = fmt.Sprintf("%T", result.Next)
 		fields["next_len"] = outputLen(result.Next)
 	}
-	log.With(fields).Info("Agent call: %s (content=%d, next=%T)", agentID, len(result.Content), result.Next)
+	kunlog.With(fields).Info("Agent call: %s (content=%d, next=%T)", agentID, len(result.Content), result.Next)
 }
 
 func (l *execLogger) devAgentCall(agentID string, result *CallResult) {
-	nextInfo := "<nil>"
+	w := logger.Gray
+	v := logger.White
+	c := logger.Cyan
+	r := logger.Reset
+
+	nextInfo := "—"
 	if result.Next != nil {
-		nextInfo = fmt.Sprintf("%T(len=%d)", result.Next, outputLen(result.Next))
+		nextInfo = fmt.Sprintf("%T (len=%d)", result.Next, outputLen(result.Next))
 	}
-	fmt.Printf("%s   Agent(%s) → Content(len=%d) Next=%s\n",
-		l.prefix(), agentID, len(result.Content), nextInfo)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%s  → Agent(%s%s%s) Content: %s%d%s chars  Next: %s%s%s\n",
+		c, v, agentID, c, v, len(result.Content), w, v, nextInfo, r))
+
+	logger.Raw(sb.String())
 }
 
 // ---------------------------------------------------------------------------

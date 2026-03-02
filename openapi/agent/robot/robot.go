@@ -22,6 +22,9 @@ func Attach(group *gin.RouterGroup, oauth types.OAuth) {
 	// Activities - Cross-robot activity feed for team (must be before /:id to avoid conflict)
 	group.GET("/activities", ListActivities) // GET /robots/activities - List team activities
 
+	// Integration credential verification (must be before /:id to avoid conflict)
+	group.POST("/integrations/verify", VerifyIntegration) // POST /robots/integrations/verify - Verify integration credentials
+
 	group.GET("/:id", GetRobot)       // GET /robots/:id - Get robot details
 	group.PUT("/:id", UpdateRobot)    // PUT /robots/:id - Update robot
 	group.DELETE("/:id", DeleteRobot) // DELETE /robots/:id - Delete robot

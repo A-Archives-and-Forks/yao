@@ -8,8 +8,10 @@ import (
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/yaoapp/gou/model"
 	"github.com/yaoapp/kun/maps"
+	robotevents "github.com/yaoapp/yao/agent/robot/events"
 	"github.com/yaoapp/yao/agent/robot/store"
 	"github.com/yaoapp/yao/agent/robot/types"
+	"github.com/yaoapp/yao/event"
 )
 
 // ==================== Robot Query API ====================
@@ -420,6 +422,12 @@ func CreateRobot(ctx *types.Context, req *CreateRobotRequest) (*RobotResponse, e
 		_ = mgr.Cache().Refresh(ctx, req.MemberID)
 	}
 
+	// Notify integrations of new robot config
+	event.Push(context.Background(), robotevents.RobotConfigCreated, robotevents.RobotConfigPayload{
+		MemberID: req.MemberID,
+		TeamID:   req.TeamID,
+	})
+
 	// Return the created robot as response
 	return GetRobotResponse(ctx, req.MemberID)
 }
@@ -532,6 +540,12 @@ func UpdateRobot(ctx *types.Context, memberID string, req *UpdateRobotRequest) (
 		_ = mgr.Cache().Refresh(ctx, memberID) // Ignore error, database is already saved
 	}
 
+	// Notify integrations of updated robot config
+	event.Push(context.Background(), robotevents.RobotConfigUpdated, robotevents.RobotConfigPayload{
+		MemberID: memberID,
+		TeamID:   existing.TeamID,
+	})
+
 	// Return the updated robot as response
 	return GetRobotResponse(ctx, memberID)
 }
@@ -571,6 +585,12 @@ func RemoveRobot(ctx *types.Context, memberID string) error {
 	if mgr != nil {
 		mgr.Cache().Remove(memberID)
 	}
+
+	// Notify integrations of deleted robot config
+	event.Push(context.Background(), robotevents.RobotConfigDeleted, robotevents.RobotConfigPayload{
+		MemberID: memberID,
+		TeamID:   existing.TeamID,
+	})
 
 	return nil
 }
