@@ -86,12 +86,13 @@ func (a *Adapter) onMessageReceive(ctx context.Context, entry *botEntry, event *
 	text, media := fsapi.ParseMessageContent(msgType, content)
 
 	cm := &fsapi.ConvertedMessage{
-		MessageID:  messageID,
-		ChatID:     chatID,
-		ChatType:   chatType,
-		Text:       text,
-		MediaItems: media,
-		EventID:    event.EventV2Base.Header.EventID,
+		MessageID:    messageID,
+		ChatID:       chatID,
+		ChatType:     chatType,
+		Text:         text,
+		MediaItems:   media,
+		EventID:      event.EventV2Base.Header.EventID,
+		LanguageCode: "zh",
 	}
 
 	if sender != nil && sender.SenderId != nil {

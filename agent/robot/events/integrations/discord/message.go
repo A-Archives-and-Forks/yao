@@ -62,6 +62,7 @@ func (a *Adapter) handleMessages(ctx context.Context, entry *botEntry, cms []*dc
 			ChatID:     lastCM.ChannelID,
 			SenderID:   lastCM.AuthorID,
 			SenderName: lastCM.AuthorName,
+			Locale:     events.NormalizeLocale(discordLocale(lastCM.Locale)),
 			Extra: map[string]any{
 				"discord_message_id": lastCM.MessageID,
 				"guild_id":           lastCM.GuildID,
@@ -127,4 +128,11 @@ func mergeContentParts(parts []interface{}) interface{} {
 	}
 
 	return parts
+}
+
+func discordLocale(locale string) string {
+	if locale == "" {
+		return "en"
+	}
+	return locale
 }

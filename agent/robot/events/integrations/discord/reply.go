@@ -7,6 +7,7 @@ import (
 
 	agentcontext "github.com/yaoapp/yao/agent/context"
 	events "github.com/yaoapp/yao/agent/robot/events"
+	dcapi "github.com/yaoapp/yao/integrations/discord"
 )
 
 // Reply sends the assistant message back to the originating Discord channel.
@@ -38,11 +39,12 @@ func (a *Adapter) sendContent(ctx context.Context, entry *botEntry, channelID, r
 		if strings.TrimSpace(c) == "" {
 			return nil
 		}
+		formatted := dcapi.FormatDiscordMarkdown(c)
 		if replyToID != "" {
-			_, err := entry.bot.SendMessageReply(channelID, c, replyToID)
+			_, err := entry.bot.SendMessageReply(channelID, formatted, replyToID)
 			return err
 		}
-		_, err := entry.bot.SendMessage(channelID, c)
+		_, err := entry.bot.SendMessage(channelID, formatted)
 		return err
 
 	case []interface{}:
@@ -108,9 +110,23 @@ func (a *Adapter) sendPartsTyped(ctx context.Context, entry *botEntry, channelID
 		switch part.Type {
 		case agentcontext.ContentText:
 			textBuf.WriteString(part.Text)
-		case agentcontext.ContentImageURL, agentcontext.ContentFile:
+		case agentcontext.ContentImageURL:
 			if err := a.flushText(entry, channelID, replyToID, &textBuf); err != nil {
 				return err
+			}
+			if part.ImageURL != nil {
+				if err := sendFileOrWrapper(entry, channelID, part.ImageURL.URL, ""); err != nil {
+					log.Error("discord reply: send image: %v", err)
+				}
+			}
+		case agentcontext.ContentFile:
+			if err := a.flushText(entry, channelID, replyToID, &textBuf); err != nil {
+				return err
+			}
+			if part.File != nil {
+				if err := sendFileOrWrapper(entry, channelID, part.File.URL, part.File.Filename); err != nil {
+					log.Error("discord reply: send file: %v", err)
+				}
 			}
 		}
 	}
@@ -121,7 +137,7 @@ func (a *Adapter) flushText(entry *botEntry, channelID, replyToID string, buf *s
 	if buf.Len() == 0 {
 		return nil
 	}
-	text := buf.String()
+	text := dcapi.FormatDiscordMarkdown(buf.String())
 	buf.Reset()
 
 	if replyToID != "" {

@@ -7,7 +7,7 @@ import (
 
 	agentcontext "github.com/yaoapp/yao/agent/context"
 	events "github.com/yaoapp/yao/agent/robot/events"
-	"github.com/yaoapp/yao/attachment"
+	fsapi "github.com/yaoapp/yao/integrations/feishu"
 )
 
 // Reply sends the assistant message back to the originating Feishu chat.
@@ -39,12 +39,7 @@ func (a *Adapter) sendContent(ctx context.Context, entry *botEntry, chatID, repl
 		if strings.TrimSpace(c) == "" {
 			return nil
 		}
-		if replyToMsgID != "" {
-			_, err := entry.bot.ReplyTextMessage(ctx, replyToMsgID, c)
-			return err
-		}
-		_, err := entry.bot.SendTextMessage(ctx, chatID, c)
-		return err
+		return a.sendMarkdown(ctx, entry, chatID, replyToMsgID, c)
 
 	case []interface{}:
 		return a.sendParts(ctx, entry, chatID, replyToMsgID, c)
@@ -54,10 +49,19 @@ func (a *Adapter) sendContent(ctx context.Context, entry *botEntry, chatID, repl
 		if ok {
 			return a.sendPartsTyped(ctx, entry, chatID, replyToMsgID, parts)
 		}
-		text := fmt.Sprintf("%v", content)
-		_, err := entry.bot.SendTextMessage(ctx, chatID, text)
+		return a.sendMarkdown(ctx, entry, chatID, replyToMsgID, fmt.Sprintf("%v", content))
+	}
+}
+
+// sendMarkdown converts standard Markdown to Feishu lark_md and sends as an interactive card.
+func (a *Adapter) sendMarkdown(ctx context.Context, entry *botEntry, chatID, replyToMsgID, text string) error {
+	formatted := fsapi.FormatFeishuMarkdown(text)
+	if replyToMsgID != "" {
+		_, err := entry.bot.ReplyCardMessage(ctx, replyToMsgID, formatted)
 		return err
 	}
+	_, err := entry.bot.SendCardMessage(ctx, chatID, formatted)
+	return err
 }
 
 func (a *Adapter) sendParts(ctx context.Context, entry *botEntry, chatID, replyToMsgID string, parts []interface{}) error {
@@ -77,12 +81,25 @@ func (a *Adapter) sendParts(ctx context.Context, entry *botEntry, chatID, replyT
 			if err := a.flushText(ctx, entry, chatID, replyToMsgID, &textBuf); err != nil {
 				return err
 			}
+			if imgMap, ok := m["image_url"].(map[string]interface{}); ok {
+				if url, ok := imgMap["url"].(string); ok {
+					if err := sendImageOrWrapper(ctx, entry, chatID, url, ""); err != nil {
+						log.Error("feishu reply: send image: %v", err)
+					}
+				}
+			}
 		case "file":
 			if err := a.flushText(ctx, entry, chatID, replyToMsgID, &textBuf); err != nil {
 				return err
 			}
-			if fileURL, ok := m["file_url"].(string); ok && fileURL != "" {
-				if err := a.sendFileContent(ctx, entry, chatID, fileURL); err != nil {
+			fileURL, _ := m["file_url"].(string)
+			if fileURL == "" {
+				if fileMap, ok := m["file"].(map[string]interface{}); ok {
+					fileURL, _ = fileMap["url"].(string)
+				}
+			}
+			if fileURL != "" {
+				if err := sendFileOrWrapper(ctx, entry, chatID, fileURL, ""); err != nil {
 					log.Error("feishu reply: send file: %v", err)
 				}
 			}
@@ -97,9 +114,23 @@ func (a *Adapter) sendPartsTyped(ctx context.Context, entry *botEntry, chatID, r
 		switch part.Type {
 		case agentcontext.ContentText:
 			textBuf.WriteString(part.Text)
-		case agentcontext.ContentImageURL, agentcontext.ContentFile:
+		case agentcontext.ContentImageURL:
 			if err := a.flushText(ctx, entry, chatID, replyToMsgID, &textBuf); err != nil {
 				return err
+			}
+			if part.ImageURL != nil {
+				if err := sendImageOrWrapper(ctx, entry, chatID, part.ImageURL.URL, ""); err != nil {
+					log.Error("feishu reply: send image: %v", err)
+				}
+			}
+		case agentcontext.ContentFile:
+			if err := a.flushText(ctx, entry, chatID, replyToMsgID, &textBuf); err != nil {
+				return err
+			}
+			if part.File != nil {
+				if err := sendFileOrWrapper(ctx, entry, chatID, part.File.URL, part.File.Filename); err != nil {
+					log.Error("feishu reply: send file: %v", err)
+				}
 			}
 		}
 	}
@@ -112,25 +143,41 @@ func (a *Adapter) flushText(ctx context.Context, entry *botEntry, chatID, replyT
 	}
 	text := buf.String()
 	buf.Reset()
-
-	if replyToMsgID != "" {
-		_, err := entry.bot.ReplyTextMessage(ctx, replyToMsgID, text)
-		return err
-	}
-	_, err := entry.bot.SendTextMessage(ctx, chatID, text)
-	return err
+	return a.sendMarkdown(ctx, entry, chatID, replyToMsgID, text)
 }
 
-func (a *Adapter) sendFileContent(ctx context.Context, entry *botEntry, chatID, fileURL string) error {
-	if strings.Contains(fileURL, "://") && !strings.HasPrefix(fileURL, "http") {
-		_, fileID, ok := attachment.Parse(fileURL)
-		if !ok {
-			return fmt.Errorf("parse wrapper: invalid format %s", fileURL)
-		}
-		_, _ = fileID, chatID
-		log.Warn("feishu: file wrapper send not yet implemented, wrapper=%s", fileURL)
+func sendImageOrWrapper(ctx context.Context, entry *botEntry, chatID, url, caption string) error {
+	if isWrapper(url) {
+		return entry.bot.SendImageFromWrapper(ctx, chatID, url, caption)
 	}
-	return nil
+	if strings.HasPrefix(url, "http") {
+		text := url
+		if caption != "" {
+			text = caption + "\n" + url
+		}
+		_, err := entry.bot.SendTextMessage(ctx, chatID, text)
+		return err
+	}
+	return fmt.Errorf("unsupported image URL scheme: %s", url)
+}
+
+func sendFileOrWrapper(ctx context.Context, entry *botEntry, chatID, url, caption string) error {
+	if isWrapper(url) {
+		return entry.bot.SendFileFromWrapper(ctx, chatID, url, caption)
+	}
+	if strings.HasPrefix(url, "http") {
+		text := url
+		if caption != "" {
+			text = caption + "\n" + url
+		}
+		_, err := entry.bot.SendTextMessage(ctx, chatID, text)
+		return err
+	}
+	return fmt.Errorf("unsupported file URL scheme: %s", url)
+}
+
+func isWrapper(url string) bool {
+	return strings.Contains(url, "://") && !strings.HasPrefix(url, "http")
 }
 
 func toContentParts(content interface{}) ([]agentcontext.ContentPart, bool) {

@@ -57,6 +57,7 @@ func (a *Adapter) handleMessages(ctx context.Context, entry *botEntry, cms []*dt
 			ChatID:     lastCM.ConversationID,
 			SenderID:   lastCM.SenderID,
 			SenderName: lastCM.SenderNick,
+			Locale:     "zh-cn",
 			Extra: map[string]any{
 				"session_webhook":   lastCM.SessionWebhook,
 				"conversation_type": lastCM.ConversationType,

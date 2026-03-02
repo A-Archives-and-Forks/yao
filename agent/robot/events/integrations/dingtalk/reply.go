@@ -38,7 +38,7 @@ func sendContent(ctx context.Context, sessionWebhook string, content interface{}
 		if strings.TrimSpace(c) == "" {
 			return nil
 		}
-		return dtapi.SendMarkdownMessage(ctx, sessionWebhook, "Reply", c)
+		return dtapi.SendMarkdownMessage(ctx, sessionWebhook, "Reply", dtapi.FormatDingTalkMarkdown(c))
 
 	case []interface{}:
 		return sendParts(ctx, sessionWebhook, c)
@@ -69,9 +69,33 @@ func sendParts(ctx context.Context, sessionWebhook string, parts []interface{}) 
 			if err := flushText(ctx, sessionWebhook, &textBuf); err != nil {
 				return err
 			}
+			if imgMap, ok := m["image_url"].(map[string]interface{}); ok {
+				if url, ok := imgMap["url"].(string); ok {
+					if strings.HasPrefix(url, "http") {
+						textBuf.WriteString(fmt.Sprintf("\n![image](%s)\n", url))
+					}
+				}
+			}
 		case "file":
 			if err := flushText(ctx, sessionWebhook, &textBuf); err != nil {
 				return err
+			}
+			fileURL, _ := m["file_url"].(string)
+			fileName, _ := m["file_name"].(string)
+			if fileURL == "" {
+				if fileMap, ok := m["file"].(map[string]interface{}); ok {
+					fileURL, _ = fileMap["url"].(string)
+					if fn, ok := fileMap["filename"].(string); ok && fn != "" {
+						fileName = fn
+					}
+				}
+			}
+			if fileURL != "" && strings.HasPrefix(fileURL, "http") {
+				label := fileName
+				if label == "" {
+					label = "file"
+				}
+				textBuf.WriteString(fmt.Sprintf("\n[%s](%s)\n", label, fileURL))
 			}
 		}
 	}
@@ -84,9 +108,23 @@ func sendPartsTyped(ctx context.Context, sessionWebhook string, parts []agentcon
 		switch part.Type {
 		case agentcontext.ContentText:
 			textBuf.WriteString(part.Text)
-		case agentcontext.ContentImageURL, agentcontext.ContentFile:
+		case agentcontext.ContentImageURL:
 			if err := flushText(ctx, sessionWebhook, &textBuf); err != nil {
 				return err
+			}
+			if part.ImageURL != nil && strings.HasPrefix(part.ImageURL.URL, "http") {
+				textBuf.WriteString(fmt.Sprintf("\n![image](%s)\n", part.ImageURL.URL))
+			}
+		case agentcontext.ContentFile:
+			if err := flushText(ctx, sessionWebhook, &textBuf); err != nil {
+				return err
+			}
+			if part.File != nil && part.File.URL != "" && strings.HasPrefix(part.File.URL, "http") {
+				label := part.File.Filename
+				if label == "" {
+					label = "file"
+				}
+				textBuf.WriteString(fmt.Sprintf("\n[%s](%s)\n", label, part.File.URL))
 			}
 		}
 	}
@@ -99,7 +137,7 @@ func flushText(ctx context.Context, sessionWebhook string, buf *strings.Builder)
 	}
 	text := buf.String()
 	buf.Reset()
-	return dtapi.SendMarkdownMessage(ctx, sessionWebhook, "Reply", text)
+	return dtapi.SendMarkdownMessage(ctx, sessionWebhook, "Reply", dtapi.FormatDingTalkMarkdown(text))
 }
 
 func toContentParts(content interface{}) ([]agentcontext.ContentPart, bool) {

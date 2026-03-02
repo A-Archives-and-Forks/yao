@@ -14,6 +14,7 @@ type ConvertedMessage struct {
 	IsBot      bool        `json:"is_bot"`
 	Text       string      `json:"text,omitempty"`
 	MediaItems []MediaItem `json:"media,omitempty"`
+	Locale     string      `json:"locale,omitempty"`
 	ReplyTo    string      `json:"reply_to,omitempty"`
 	IsDM       bool        `json:"is_dm"`
 }
@@ -71,6 +72,7 @@ func ConvertMessage(m *discordgo.Message) *ConvertedMessage {
 		cm.AuthorID = m.Author.ID
 		cm.AuthorName = m.Author.Username
 		cm.IsBot = m.Author.Bot
+		cm.Locale = m.Author.Locale
 	}
 
 	if m.MessageReference != nil {
